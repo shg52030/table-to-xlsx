@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>vxe-table 结构复刻（回归样本）</title>
+    <style>
+      body { font: 13px/1.6 "Microsoft YaHei", sans-serif; padding: 20px 24px; color: #1f2937; }
+      .vxe-table--main-wrapper { position: relative; width: 1500px; border: 1px solid #dcdfe6; }
+      .vxe-table--header-wrapper { overflow: hidden; background: #f8f8f9; }
+      .vxe-table--body-wrapper { overflow: auto; height: 415px; }
+      table { border-collapse: separate; border-spacing: 0; table-layout: fixed; width: 1500px; }
+      th, td { border-right: 1px solid #e8eaec; border-bottom: 1px solid #e8eaec; padding: 0; height: 32px; font-weight: normal; text-align: left; }
+      th { font-weight: 500; background: #f8f8f9; }
+      .vxe-cell { padding: 0 10px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+      .vxe-checkbox--icon { display: inline-block; width: 14px; height: 14px; border: 1px solid #c0c4cc; border-radius: 2px; }
+      .vxe-body--row { counter-increment: row-number; }
+      .vxe-table--body { counter-reset: row-number; }
+      .vxe-body--column.col--seq .vxe-cell::before { content: counter(row-number); }
+      .col--center { text-align: center; }
+    </style>
+  </head>
+  <body>
+    <h2 style="font-size: 14px; color: #185fa5">vxe-table 结构复刻</h2>
+
+    <div class="vxe-table--main-wrapper">
+      <div data-tid="1" class="vxe-table--header-wrapper body--wrapper">
+        <div class="vxe-body--x-space"></div>
+        <table data-tid="1" cellspacing="0" cellpadding="0" border="0" class="vxe-table--header" style="width: 1500px">
+          <colgroup>
+            <col name="col_17" style="width: 80px" />
+            <col name="col_18" style="width: 60px" />
+            <col name="col_19" style="width: 180px" />
+            <col name="col_20" style="width: 180px" />
+            <col name="col_21" style="width: 180px" />
+            <col name="col_22" style="width: 180px" />
+            <col name="col_23" style="width: 180px" />
+            <col name="col_24" style="width: 180px" />
+            <col name="col_25" style="width: 280px" />
+          </colgroup>
+          <thead>
+            <tr class="vxe-header--row">
+              <th data-colid="col_17" class="vxe-header--column col_17 col--center col--checkbox col--fixed">
+                <div class="vxe-cell c--tooltip" style="width: 78px">
+                  <span class="vxe-cell--title">
+                    <span title="全选/取消" class="vxe-cell--checkbox">
+                      <span class="vxe-checkbox--icon vxe-checkbox--checked-icon"></span>
+                      <span class="vxe-checkbox--icon vxe-checkbox--unchecked-icon"></span>
+                      <span class="vxe-checkbox--icon vxe-checkbox--indeterminate-icon"></span>
+                    </span>
+                  </span>
+                </div>
+              </th>
+              <th data-colid="col_18" class="vxe-header--column col_18 col--center col--seq col--fixed">
+                <div class="vxe-cell c--tooltip" style="width: 58px">
+                  <span class="vxe-cell--title">序号</span>
+                </div>
+              </th>
+              <th data-colid="col_19" class="vxe-header--column col_19 col--left">
+                <div class="vxe-cell c--tooltip" style="width: 178px">
+                  <span class="vxe-cell--title">户编号</span>
+                  <span class="vxe-cell--sort"><i class="vxe-icon--caret-top"></i><i class="vxe-icon--caret-bottom"></i></span>
+                </div>
+                <div class="vxe-resizable"></div>
+              </th>
+              <th data-colid="col_20" class="vxe-header--column col_20 col--left">
+                <div class="vxe-cell c--tooltip" style="width: 178px">
+                  <span class="vxe-cell--title">户主姓名</span>
+                </div>
+              </th>
+              <th data-colid="col_21" class="vxe-header--column col_21 col--left">
+                <div class="vxe-cell c--tooltip" style="width: 178px">
+                  <span class="vxe-cell--title">户主身份证号</span>
+                </div>
+              </th>
+              <th data-colid="col_22" class="vxe-header--column col_22 col--left">
+                <div class="vxe-cell c--tooltip" style="width: 178px">
+                  <span class="vxe-cell--title">家庭人口数</span>
+                </div>
+              </th>
+              <th data-colid="col_23" class="vxe-header--column col_23 col--left">
+                <div class="vxe-cell c--tooltip" style="width: 178px">
+                  <span class="vxe-cell--title">户口性质</span>
+                </div>
+              </th>
+              <th data-colid="col_24" class="vxe-header--column col_24 col--left">
+                <div class="vxe-cell c--tooltip" style="width: 178px">
+                  <span class="vxe-cell--title">户口本号</span>
+                </div>
+              </th>
+              <th data-colid="col_25" class="vxe-header--column col_25 col--left col--last">
+                <div class="vxe-cell c--tooltip" style="width: 278px">
+                  <span class="vxe-cell--title">住址</span>
+                </div>
+              </th>
+            </tr>
+          </thead>
+        </table>
+        <div class="vxe-table--header-border-line" style="width: 1500px"></div>
+      </div>
+
+      <div data-tid="1" class="vxe-table--body-wrapper body--wrapper" style="height: 415px">
+        <div class="vxe-body--x-space"></div>
+        <table data-tid="1" cellspacing="0" cellpadding="0" border="0" class="vxe-table--body" style="width: 1500px">
+          <colgroup>
+            <col name="col_17" style="width: 80px" />
+            <col name="col_18" style="width: 60px" />
+            <col name="col_19" style="width: 180px" />
+            <col name="col_20" style="width: 180px" />
+            <col name="col_21" style="width: 180px" />
+            <col name="col_22" style="width: 180px" />
+            <col name="col_23" style="width: 180px" />
+            <col name="col_24" style="width: 180px" />
+            <col name="col_25" style="width: 280px" />
+          </colgroup>
+          <tbody>
+            <tr data-rowid="row_126" class="vxe-body--row">
+              <td data-colid="col_17" class="vxe-body--column col_17 col--center col--checkbox table-row-checkbox"><div class="vxe-cell" style="width: 78px"></div></td>
+              <td data-colid="col_18" class="vxe-body--column col_18 col--center col--seq"><div class="vxe-cell" style="width: 58px"></div></td>
+              <td data-colid="col_19" class="vxe-body--column col_19"><div class="vxe-cell"><span class="vxe-cell--label">1575</span></div></td>
+              <td data-colid="col_20" class="vxe-body--column col_20"><div class="vxe-cell"><span class="vxe-cell--label">许**</span></div></td>
+              <td data-colid="col_21" class="vxe-body--column col_21"><div class="vxe-cell"><span class="vxe-cell--label">150526196603050017</span></div></td>
+              <td data-colid="col_22" class="vxe-body--column col_22"><div class="vxe-cell"><span class="vxe-cell--label">1</span></div></td>
+              <td data-colid="col_23" class="vxe-body--column col_23"><div class="vxe-cell"><span class="vxe-cell--label">农业户口</span></div></td>
+              <td data-colid="col_24" class="vxe-body--column col_24"><div class="vxe-cell"><span class="vxe-cell--label"></span></div></td>
+              <td data-colid="col_25" class="vxe-body--column col_25 col--last"><div class="vxe-cell"><span class="vxe-cell--label">鲁xx山村</span></div></td>
+            </tr>
+            <tr data-rowid="row_127" class="vxe-body--row">
+              <td data-colid="col_17" class="vxe-body--column col_17 col--center col--checkbox table-row-checkbox"><div class="vxe-cell" style="width: 78px"></div></td>
+              <td data-colid="col_18" class="vxe-body--column col_18 col--center col--seq"><div class="vxe-cell" style="width: 58px"></div></td>
+              <td data-colid="col_19" class="vxe-body--column col_19"><div class="vxe-cell"><span class="vxe-cell--label">1576</span></div></td>
+              <td data-colid="col_20" class="vxe-body--column col_20"><div class="vxe-cell"><span class="vxe-cell--label">王**</span></div></td>
+              <td data-colid="col_21" class="vxe-body--column col_21"><div class="vxe-cell"><span class="vxe-cell--label">320102199001011234</span></div></td>
+              <td data-colid="col_22" class="vxe-body--column col_22"><div class="vxe-cell"><span class="vxe-cell--label">3</span></div></td>
+              <td data-colid="col_23" class="vxe-body--column col_23"><div class="vxe-cell"><span class="vxe-cell--label">非农业户口</span></div></td>
+              <td data-colid="col_24" class="vxe-body--column col_24"><div class="vxe-cell"><span class="vxe-cell--label">NO.0012</span></div></td>
+              <td data-colid="col_25" class="vxe-body--column col_25 col--last"><div class="vxe-cell"><span class="vxe-cell--label">和平路 12 号</span></div></td>
+            </tr>
+            <tr data-rowid="row_128" class="vxe-body--row">
+              <td data-colid="col_17" class="vxe-body--column col_17 col--center col--checkbox table-row-checkbox"><div class="vxe-cell" style="width: 78px"></div></td>
+              <td data-colid="col_18" class="vxe-body--column col_18 col--center col--seq"><div class="vxe-cell" style="width: 58px"></div></td>
+              <td data-colid="col_19" class="vxe-body--column col_19"><div class="vxe-cell"><span class="vxe-cell--label">1577</span></div></td>
+              <td data-colid="col_20" class="vxe-body--column col_20"><div class="vxe-cell"><span class="vxe-cell--label">李**</span></div></td>
+              <td data-colid="col_21" class="vxe-body--column col_21"><div class="vxe-cell"><span class="vxe-cell--label">110101198505050011</span></div></td>
+              <td data-colid="col_22" class="vxe-body--column col_22"><div class="vxe-cell"><span class="vxe-cell--label">2</span></div></td>
+              <td data-colid="col_23" class="vxe-body--column col_23"><div class="vxe-cell"><span class="vxe-cell--label">农业户口</span></div></td>
+              <td data-colid="col_24" class="vxe-body--column col_24"><div class="vxe-cell"><span class="vxe-cell--label"></span></div></td>
+              <td data-colid="col_25" class="vxe-body--column col_25 col--last"><div class="vxe-cell"><span class="vxe-cell--label">建设大道 88 号</span></div></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <pre id="out" style="display: none"></pre>
+    <script src="../content/parser.js"></script>
+    <script src="../content/xlsx.js"></script>
+    <script src="vxe-run.js"></script>
+  </body>
+</html>

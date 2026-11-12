@@ -1,0 +1,23 @@
+# 测试产物
+test/out.xlsx
+test/e2e-out.xlsx
+test/vxe-out.xlsx
+test/e2e-frame.xlsx
+test/tmp-*.json
+test/*.log
+
+# 打包产物
+*.zip
+dist/
+
+# 系统与编辑器
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+.vscode/
+*.swp
+
+# Python
+__pycache__/
+*.pyc

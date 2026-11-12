@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>表格解析测试页</title>
+    <style>
+      body { font: 13px/1.5 "Microsoft YaHei", sans-serif; padding: 20px 28px; color: #1f2937; }
+      table { border-collapse: collapse; margin: 6px 0 26px; }
+      td, th { border: 1px solid #cbd5e1; padding: 4px 10px; }
+      th { background: #f1f5f9; }
+      h2 { font-size: 13px; color: #185fa5; margin: 22px 0 4px; }
+      .fake { display: grid; grid-template-columns: repeat(3, 90px); border: 1px solid #cbd5e1; width: 270px; }
+      .fake div { border: 1px solid #cbd5e1; padding: 4px 8px; }
+      #out { background: #0f172a; color: #e2e8f0; padding: 12px; white-space: pre-wrap; font: 12px/1.5 Consolas, monospace; }
+    </style>
+  </head>
+  <body>
+    <h1>表格解析测试页</h1>
+
+    <h2>1. 普通表格</h2>
+    <table aria-label="普通表格">
+      <tr><th>姓名</th><th>部门</th><th>工号</th></tr>
+      <tr><td>张三</td><td>研发部</td><td>1001</td></tr>
+      <tr><td>李四</td><td>市场部</td><td>1002</td></tr>
+    </table>
+
+    <h2>2. 合并单元格 + 多级表头</h2>
+    <table aria-label="合并表格">
+      <tr>
+        <td rowspan="2">序号</td>
+        <td colspan="3">基本信息</td>
+        <td rowspan="2">备注</td>
+      </tr>
+      <tr><td>姓名</td><td>性别</td><td>年龄</td></tr>
+      <tr><td>1</td><td>王五</td><td>男</td><td>28</td><td></td></tr>
+    </table>
+
+    <h2>3. 隐藏行 / 隐藏单元格</h2>
+    <table aria-label="隐藏行表格">
+      <tr><td>A</td><td>1</td></tr>
+      <tr style="display: none"><td>B</td><td>2</td></tr>
+      <tr><td>C</td><td>3</td></tr>
+      <tr><td style="visibility: hidden">D</td><td>4</td></tr>
+    </table>
+
+    <h2>4. 数字与日期格式</h2>
+    <table aria-label="数字表格">
+      <tr><td>0012</td><td>1,234</td><td>-5.5</td><td>3.14</td></tr>
+      <tr><td>1e5</td><td>0.5</td><td>2024-01-05</td><td>12%</td></tr>
+      <tr><td>1234567890123456789</td><td>0</td><td>-0.001</td><td>  7  </td></tr>
+    </table>
+
+    <h2>5. 嵌套表格</h2>
+    <table aria-label="嵌套表格">
+      <tr><td>外1</td><td>外2</td></tr>
+      <tr>
+        <td>外3</td>
+        <td>
+          <table>
+            <tr><td>内A</td><td>内B</td></tr>
+            <tr><td>内C</td><td>内D</td></tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+
+    <h2>6. 多行文本</h2>
+    <table aria-label="多行表格">
+      <tr><td>第一行<br />第二行</td><td><div>甲</div><div>乙</div></td></tr>
+      <tr><td>带&nbsp;空格</td><td>  首尾空格  </td></tr>
+    </table>
+
+    <h2>7. div 假表格（不应被导出）</h2>
+    <div class="fake">
+      <div>假A</div><div>假B</div><div>假C</div>
+      <div>假D</div><div>假E</div><div>假F</div>
+    </div>
+
+    <h2>8. 大表格（300 行 × 8 列）</h2>
+    <table aria-label="大表格" id="big"></table>
+
+    <div id="out">running…</div>
+
+    <script src="../content/parser.js"></script>
+    <script src="../content/xlsx.js"></script>
+    <script src="run.js"></script>
+  </body>
+</html>
