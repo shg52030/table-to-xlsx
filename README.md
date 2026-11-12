@@ -207,7 +207,7 @@ node test/eval.mjs test/vxe.html "JSON.parse(document.getElementById('out').text
 # 端到端：真实加载扩展 → 点按钮 → 导出 → 校验下载文件（15 项断言）
 node test/e2e.mjs
 
-# 打包
+# 打包（版本号自动取自 manifest.json，输出到项目上级目录）
 python build.py
 ```
 
