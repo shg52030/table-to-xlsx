@@ -201,116 +201,165 @@
 
   /* ================= 单表解析 ================= */
 
-  function extract(table, opts) {
+  /* 把 <table> 拍平成快照：{ rows: [{cells:[{text, rs, cs, checkbox}]}], probes: {列号: 伪元素信息} }
+     快照是唯一输入，实时 DOM 与虚拟滚动采集两条路径共用同一套网格构建逻辑。 */
+  function snapshotTable(table, opts) {
     opts = opts || {};
     var includeHidden = !!opts.includeHidden;
+    var rows = [];
+    var probes = {};
+
+    var srcRows = table.rows || [];
+    for (var i = 0; i < srcRows.length; i++) {
+      var tr = srcRows[i];
+      if (!tr.cells.length) continue;
+      if (!includeHidden && isHidden(tr)) continue;
+
+      var cells = [];
+      var col = 0;
+      for (var k = 0; k < tr.cells.length; k++) {
+        var td = tr.cells[k];
+        var hidden = !includeHidden && isHidden(td);
+        var cs = Math.min(spanOf(td, 'colspan'), MAX_COLS);
+        cells.push({
+          text: hidden ? '' : cellText(td),
+          rs: spanOf(td, 'rowspan'),
+          cs: cs,
+          checkbox: looksCheckbox(td)
+        });
+        if (!probes[col] && !hidden) {
+          var ps = pseudoInfo(td);
+          if (ps) probes[col] = ps;
+        }
+        col += cs;
+      }
+      rows.push({ cells: cells });
+    }
+    return { rows: rows, probes: probes };
+  }
+
+  /* CSS 生成内容（vxe 的序号列等）：字面量给文本，counter 给起始值和步长 */
+  function pseudoInfo(cell) {
+    var ps = findPseudo(cell);
+    if (!ps) return null;
+    if (ps.kind === 'literal') return { kind: 'literal', text: ps.text };
+    var info = counterInfo(cell, ps.name);
+    return { kind: 'counter', start: info.start, step: info.step };
+  }
+
+  function buildGrid(snap, opts) {
+    opts = opts || {};
     var readCss = opts.readCssContent !== false;
     var keepEmpty = opts.keepEmptyCols !== false;
     var dropCheckbox = opts.dropCheckboxCols !== false;
 
+    var srcRows = (snap && snap.rows) || [];
+    var probes = (snap && snap.probes) || {};
+    var grid = [];
+    var cellGrid = [];
+    var merges = [];
+    var occupied = {};
+
+    for (var r = 0; r < srcRows.length; r++) {
+      if (!grid[r]) grid[r] = [];
+      if (!cellGrid[r]) cellGrid[r] = [];
+      var c = 0;
+      var cells = srcRows[r].cells || [];
+      for (var k = 0; k < cells.length; k++) {
+        var td = cells[k];
+        while (occupied[r + ':' + c]) c++;
+        if (c >= MAX_COLS) break;
+
+        var rs = Math.min(td.rs || 1, srcRows.length - r);
+        var cs = Math.min(td.cs || 1, MAX_COLS - c);
+
+        for (var y = 0; y < rs; y++) {
+          var rr = r + y;
+          if (!grid[rr]) grid[rr] = [];
+          if (!cellGrid[rr]) cellGrid[rr] = [];
+          for (var x = 0; x < cs; x++) {
+            occupied[rr + ':' + (c + x)] = true;
+            grid[rr][c + x] = y === 0 && x === 0 ? td.text : '';
+            cellGrid[rr][c + x] = td;
+          }
+        }
+        if (rs > 1 || cs > 1) merges.push({ r: r, c: c, rs: rs, cs: cs });
+        c += cs;
+      }
+    }
+
+    var width = 0;
+    for (var w = 0; w < grid.length; w++) if (grid[w].length > width) width = grid[w].length;
+
+    /* 全空列：用采集到的 CSS 生成内容补值（如 vxe 的序号列） */
+    if (readCss && grid.length && width) {
+      for (var col = 0; col < width; col++) {
+        var empty = true;
+        for (var q = 0; q < grid.length; q++) {
+          if (grid[q][col] !== '' && grid[q][col] != null) {
+            empty = false;
+            break;
+          }
+        }
+        if (!empty) continue;
+
+        var probe = probes[col];
+        if (!probe) continue;
+
+        if (probe.kind === 'literal') {
+          for (var lr = 0; lr < grid.length; lr++) grid[lr][col] = probe.text;
+        } else if (probe.kind === 'counter') {
+          for (var cr = 0; cr < grid.length; cr++) {
+            grid[cr][col] = String(probe.start + probe.step * (cr + 1));
+          }
+        }
+      }
+    }
+
+    /* 勾选列：表头是勾选框 + 整列为空 */
+    var checkboxCols = [];
+    if (dropCheckbox && grid.length) {
+      for (var cc = 0; cc < width; cc++) {
+        var headCell = cellGrid[0] && cellGrid[0][cc];
+        if (!headCell || !headCell.checkbox) continue;
+        var allEmpty = true;
+        for (var er = 0; er < grid.length; er++) {
+          if (grid[er][cc] !== '' && grid[er][cc] != null) {
+            allEmpty = false;
+            break;
+          }
+        }
+        if (allEmpty) checkboxCols.push(cc);
+      }
+    }
+
+    var trimmed = trim(grid, merges, keepEmpty);
+    trimmed.checkboxCols = checkboxCols;
+    return trimmed;
+  }
+
+  function extract(table, opts) {
     hiddenCache = typeof WeakMap !== 'undefined' ? new WeakMap() : null;
-
     try {
-      var rowsColl = table.rows || [];
-      var srcRows = [];
-      for (var i = 0; i < rowsColl.length; i++) {
-        if (!includeHidden && isHidden(rowsColl[i])) continue;
-        srcRows.push(rowsColl[i]);
-      }
-
-      var grid = [];
-      var cellGrid = [];
-      var merges = [];
-      var occupied = {};
-
-      for (var r = 0; r < srcRows.length; r++) {
-        var row = srcRows[r];
-        if (!grid[r]) grid[r] = [];
-        if (!cellGrid[r]) cellGrid[r] = [];
-        var c = 0;
-        var cells = row.cells || [];
-        for (var k = 0; k < cells.length; k++) {
-          var td = cells[k];
-          while (occupied[r + ':' + c]) c++;
-          if (c >= MAX_COLS) break;
-
-          var rs = Math.min(spanOf(td, 'rowspan'), srcRows.length - r);
-          var cs = Math.min(spanOf(td, 'colspan'), MAX_COLS - c);
-          var text = !includeHidden && isHidden(td) ? '' : cellText(td);
-
-          for (var y = 0; y < rs; y++) {
-            var rr = r + y;
-            if (!grid[rr]) grid[rr] = [];
-            if (!cellGrid[rr]) cellGrid[rr] = [];
-            for (var x = 0; x < cs; x++) {
-              occupied[rr + ':' + (c + x)] = true;
-              grid[rr][c + x] = y === 0 && x === 0 ? text : '';
-              cellGrid[rr][c + x] = td;
-            }
-          }
-          if (rs > 1 || cs > 1) merges.push({ r: r, c: c, rs: rs, cs: cs });
-          c += cs;
-        }
-      }
-
-      var width = 0;
-      for (var w = 0; w < grid.length; w++) if (grid[w].length > width) width = grid[w].length;
-
-      /* 全空列：先尝试读 CSS 生成内容（如 vxe 的序号列） */
-      if (readCss && grid.length && width) {
-        for (var col = 0; col < width; col++) {
-          var empty = true;
-          for (var q = 0; q < grid.length; q++) {
-            if (grid[q][col] !== '' && grid[q][col] != null) {
-              empty = false;
-              break;
-            }
-          }
-          if (!empty) continue;
-
-          var probe = null;
-          for (var pr = 0; pr < cellGrid.length && !probe; pr++) {
-            if (cellGrid[pr][col]) probe = cellGrid[pr][col];
-          }
-          if (!probe) continue;
-
-          var pseudo = findPseudo(probe);
-          if (!pseudo) continue;
-
-          if (pseudo.kind === 'literal') {
-            for (var lr = 0; lr < grid.length; lr++) grid[lr][col] = pseudo.text;
-          } else if (pseudo.kind === 'counter') {
-            var info = counterInfo(probe, pseudo.name);
-            for (var cr = 0; cr < grid.length; cr++) {
-              grid[cr][col] = String(info.start + info.step * (cr + 1));
-            }
-          }
-        }
-      }
-
-      /* 勾选列：表头是勾选框 + 整列为空 */
-      var checkboxCols = [];
-      if (dropCheckbox && grid.length) {
-        for (var cc = 0; cc < width; cc++) {
-          var headCell = cellGrid[0] && cellGrid[0][cc];
-          if (!looksCheckbox(headCell)) continue;
-          var allEmpty = true;
-          for (var er = 0; er < grid.length; er++) {
-            if (grid[er][cc] !== '' && grid[er][cc] != null) {
-              allEmpty = false;
-              break;
-            }
-          }
-          if (allEmpty) checkboxCols.push(cc);
-        }
-      }
-
-      var trimmed = trim(grid, merges, keepEmpty);
-      trimmed.checkboxCols = checkboxCols;
-      return trimmed;
+      return buildGrid(snapshotTable(table, opts), opts);
     } finally {
       hiddenCache = null;
     }
+  }
+
+  /* 表格可能是虚拟滚动的，采集过程异步，所以这里返回 Promise */
+  async function extractAny(table, opts) {
+    var plan = null;
+    try {
+      plan = T2X.virtualPlan ? T2X.virtualPlan(table) : null;
+    } catch (e) {
+      plan = null;
+    }
+    if (plan && T2X.harvest) {
+      var snap = await T2X.harvest(table, plan, opts || {});
+      if (snap && snap.rows && snap.rows.length > plan.rendered) return buildGrid(snap, opts || {});
+    }
+    return extract(table, opts);
   }
 
   function isBlankRow(row) {
@@ -460,6 +509,13 @@
         }
       }
     }
+    var vplan = null;
+    try {
+      vplan = T2X.virtualPlan ? T2X.virtualPlan(el) : null;
+    } catch (e) {
+      vplan = null;
+    }
+
     return {
       el: el,
       role: roleOf(el),
@@ -471,7 +527,9 @@
       cols: edges.length,
       rowCount: rowCount,
       colNames: colNamesOf(el),
-      hint: classHint(el)
+      hint: classHint(el),
+      virtual: !!vplan,
+      totalRows: vplan ? vplan.estimate : 0
     };
   }
 
@@ -675,6 +733,9 @@
       else groups.push({ head: null, bodies: [it] });
     }
 
+    // 3.5 固定列分组吸收：vxe 等会把固定列渲染成独立表格，表头+表体会自成一组
+    groups = absorbFixedGroups(groups);
+
     // 4. 按 DOM 顺序还原，避免分组过程打乱页面原有顺序
     var FOLLOWING = 4;
     groups.sort(function (a, b) {
@@ -697,6 +758,51 @@
     return group.head;
   }
 
+  /* 固定列分组吸收：独立渲染的固定列分组，其列是主表列的子集、行数一致、
+     与主表同一垂直位置，就按列偏移并进主表，避免「序号列单独一个 Sheet」。 */
+  function absorbFixedGroups(groups) {
+    var drop = [];
+    for (var i = 0; i < groups.length; i++) {
+      if (drop[i]) continue;
+      var gp = groupPrimary(groups[i]);
+      if (!gp || !gp.edges.length) continue;
+
+      var bestJ = -1;
+      var bestOff = null;
+      var bestScore = 0;
+      for (var j = 0; j < groups.length; j++) {
+        if (i === j || drop[j]) continue;
+        var hp = groupPrimary(groups[j]);
+        if (!hp || !hp.edges.length) continue;
+        if (hp.cols <= gp.cols) continue;
+        if (hp.rowCount !== gp.rowCount) continue;
+        if (Math.abs(hp.top - gp.top) > 12) continue;
+        if (!containsEdges(gp.edges, hp.edges)) continue;
+        var off = offsetOf(gp, hp);
+        if (off === null) continue;
+        var sc = edgeSim(gp.edges, hp.edges);
+        if (sc > bestScore) {
+          bestScore = sc;
+          bestJ = j;
+          bestOff = off;
+        }
+      }
+      if (bestJ < 0) continue;
+
+      var host = groups[bestJ];
+      host.absorbed = host.absorbed || [];
+      if (groups[i].head) host.absorbed.push({ item: groups[i].head, offset: bestOff, kind: 'head' });
+      for (var b = 0; b < groups[i].bodies.length; b++) {
+        host.absorbed.push({ item: groups[i].bodies[b], offset: bestOff, kind: 'body' });
+      }
+      drop[i] = true;
+    }
+
+    var out = [];
+    for (var k = 0; k < groups.length; k++) if (!drop[k]) out.push(groups[k]);
+    return out;
+  }
+
   function groupElement(group) {
     if (group.head) return group.head.el;
     return group.bodies[0] ? group.bodies[0].el : null;
@@ -704,27 +810,40 @@
 
   /* ================= 合并 ================= */
 
-  function mergeGroup(group, opts) {
+  async function mergeGroup(group, opts) {
     var primary = groupPrimary(group);
     if (!primary) return null;
 
-    var mainEdges = primary.edges;
     var totalCols = primary.cols;
     var fragments = [];
 
     if (group.head) {
       var headOff = offsetOf(group.head, primary);
       if (headOff === null) headOff = 0;
-      fragments.push({ item: group.head, offset: headOff, kind: 'head' });
+      fragments.push({ item: group.head, offset: headOff, kind: 'head', extra: false });
       totalCols = Math.max(totalCols, headOff + group.head.cols);
     }
     for (var b = 0; b < group.bodies.length; b++) {
       var bodyItem = group.bodies[b];
       var off = b === 0 ? 0 : offsetOf(bodyItem, primary);
       if (off === null) continue;
-      fragments.push({ item: bodyItem, offset: off, kind: 'body' });
+      fragments.push({ item: bodyItem, offset: off, kind: 'body', extra: b > 0, primary: b === 0 });
       totalCols = Math.max(totalCols, off + bodyItem.cols);
     }
+    // 被吸收进来的固定列片段（来自另一个分组），按列偏移叠放
+    var extra = group.absorbed || [];
+    for (var eb = 0; eb < extra.length; eb++) {
+      fragments.push({ item: extra[eb].item, offset: extra[eb].offset, kind: extra[eb].kind, extra: true });
+      totalCols = Math.max(totalCols, extra[eb].offset + extra[eb].item.cols);
+    }
+
+    // 表头可能比表体多出占位列（如 vxe 的 8px gutter），按表体宽度截断
+    var bodyCols = 0;
+    for (var fc0 = 0; fc0 < fragments.length; fc0++) {
+      if (fragments[fc0].kind !== 'body') continue;
+      bodyCols = Math.max(bodyCols, fragments[fc0].offset + fragments[fc0].item.cols);
+    }
+    if (bodyCols > 0 && bodyCols < totalCols) totalCols = bodyCols;
 
     var headRows = [];
     var bodyRows = [];
@@ -734,7 +853,7 @@
 
     for (var f = 0; f < fragments.length; f++) {
       var frag = fragments[f];
-      var data = extract(frag.item.el, opts);
+      var data = await extractAny(frag.item.el, opts);
       var off2 = frag.offset;
 
       for (var cbi = 0; cbi < (data.checkboxCols || []).length; cbi++) {
@@ -742,20 +861,23 @@
       }
 
       if (frag.kind === 'head') {
-        var rowBase = headRows.length;
         for (var hr = 0; hr < data.rows.length; hr++) {
-          var line = new Array(totalCols).fill('');
-          for (var hc = 0; hc < data.rows[hr].length; hc++) line[hc + off2] = data.rows[hr][hc];
-          headRows.push(line);
+          if (!headRows[hr]) headRows[hr] = new Array(totalCols).fill('');
+          for (var hc = 0; hc < data.rows[hr].length; hc++) {
+            var target = hc + off2;
+            if (target < 0 || target >= totalCols) continue;
+            if (frag.extra && headRows[hr][target]) continue; // 主表已有值，不覆盖
+            headRows[hr][target] = data.rows[hr][hc];
+          }
         }
-        for (var hm = 0; hm < data.merges.length; hm++) {
-          var mg = data.merges[hm];
-          headMerges.push({ r: mg.r + rowBase, c: mg.c + off2, rs: mg.rs, cs: mg.cs });
+        if (!frag.extra) {
+          for (var hm = 0; hm < data.merges.length; hm++) {
+            var mg = data.merges[hm];
+            headMerges.push({ r: mg.r, c: mg.c + off2, rs: mg.rs, cs: mg.cs });
+          }
         }
       } else {
-        var isPrimaryBody = frag === fragments.filter(function (x) {
-          return x.kind === 'body';
-        })[0];
+        var isPrimaryBody = !!frag.primary;
 
         if (isPrimaryBody) {
           for (var br = 0; br < data.rows.length; br++) {
@@ -843,6 +965,11 @@
     while (node && guard++ < 60) {
       var prev = node.previousElementSibling;
       while (prev) {
+        // 组件化表格的表头/固定列也是兄弟节点，跳过它们去找真正的小标题
+        if (prev.querySelector && prev.querySelector('table')) {
+          prev = prev.previousElementSibling;
+          continue;
+        }
         if (/^H[1-6]$/.test(prev.tagName)) {
           var htxt = prev.textContent.trim();
           if (htxt) return htxt;
@@ -867,9 +994,12 @@
     var head = group.head;
     var body = group.bodies[0];
     var rows = (head ? head.rowCount : 0) + (body ? body.rowCount : 0);
+    var virtual = !!(body && body.virtual);
+    var totalRows = body ? body.totalRows || body.rowCount : 0;
+    if (virtual) rows = (head ? head.rowCount : 0) + totalRows;
     var cols = 0;
     if (body) cols = body.cols;
-    if (head) cols = Math.max(cols, head.cols);
+    else if (head) cols = head.cols;
 
     var preview = [];
     var probeRow = (head && head.el.rows.length ? head.el.rows[0] : body && body.el.rows[0]) || null;
@@ -889,7 +1019,7 @@
     }
     cols = Math.max(cols - checkboxCount, 0);
 
-    var fragCount = (head ? 1 : 0) + group.bodies.length;
+    var fragCount = (head ? 1 : 0) + group.bodies.length + (group.absorbed ? group.absorbed.length : 0);
     return {
       index: index,
       rows: rows,
@@ -898,7 +1028,9 @@
       title: el ? guessTitle(el, index) : '表格' + (index + 1),
       nested: !!(el && el.parentElement && el.parentElement.closest && el.parentElement.closest('table')),
       fragments: fragCount,
-      merged: fragCount > 1
+      merged: fragCount > 1,
+      virtual: virtual,
+      totalRows: totalRows
     };
   }
 
@@ -923,7 +1055,7 @@
     return list;
   }
 
-  function extractByIndex(index, opts) {
+  async function extractByIndex(index, opts) {
     var item = lastScan[index];
     if (!item || !item.group) {
       scan();
@@ -931,7 +1063,7 @@
     }
     if (!item || !item.group) throw new Error('表格已不存在，请重新扫描页面');
 
-    var data = mergeGroup(item.group, opts || {});
+    var data = await mergeGroup(item.group, opts || {});
     if (!data || !data.rows.length) throw new Error('表格没有可导出的内容');
     data.title = item.title;
     return data;
@@ -943,4 +1075,7 @@
   T2X.cellText = cellText;
   T2X._analyze = analyze;
   T2X._scorePair = scorePair;
+  T2X._isHidden = isHidden;
+  T2X._pseudoOf = pseudoInfo;
+  T2X._looksCheckbox = looksCheckbox;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

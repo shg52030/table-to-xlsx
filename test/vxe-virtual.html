@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>vxe-table 固定列 + 虚拟滚动（回归样本）</title>
+    <style>
+      body { font: 13px/1.6 "Microsoft YaHei", sans-serif; padding: 20px 24px; color: #1f2937; }
+      .vxe-table--main-wrapper { position: relative; width: 1180px; border: 1px solid #dcdfe6; }
+      .vxe-table--header-wrapper { overflow: hidden; background: #f8f8f9; }
+      .vxe-table--body-wrapper { overflow: auto; height: 300px; }
+      table { border-collapse: separate; border-spacing: 0; table-layout: fixed; }
+      .vxe-table--header { width: 1178px; }
+      .vxe-table--body { width: 1170px; }
+      th, td { border-right: 1px solid #e8eaec; border-bottom: 1px solid #e8eaec; padding: 0; height: 32px; font-weight: normal; text-align: left; box-sizing: border-box; }
+      th { font-weight: 500; background: #f8f8f9; }
+      .vxe-cell { padding: 0 10px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; line-height: 32px; }
+      .vxe-checkbox--icon { display: inline-block; width: 14px; height: 14px; border: 1px solid #c0c4cc; border-radius: 2px; }
+      .col--center { text-align: center; }
+
+      /* 主表里的固定列被隐藏，真正的内容渲染在 fixed-left 层 */
+      .fixed--hidden { visibility: hidden; }
+
+      /* 序号列：CSS counter 生成，DOM 里是空的 */
+      .vxe-table--body { counter-reset: row-number 0; }
+      .vxe-body--row { counter-increment: row-number; }
+      .vxe-body--column.col--seq .vxe-cell::before { content: counter(row-number); }
+
+      .vxe-table--fixed-left-wrapper {
+        position: absolute; left: 0; top: 0; width: 140px; z-index: 2;
+        background: #fff; box-shadow: 2px 0 6px rgba(15, 23, 42, 0.12);
+      }
+      .vxe-table--fixed-left-wrapper .vxe-table--header,
+      .vxe-table--fixed-left-wrapper .vxe-table--body { width: 140px; }
+    </style>
+  </head>
+  <body>
+    <h3 style="margin: 0 0 12px">户籍信息（固定列 + 虚拟滚动，共 500 行）</h3>
+
+    <div class="vxe-table--main-wrapper">
+      <!-- 固定列层：只有勾选列 + 序号列 -->
+      <div class="vxe-table--fixed-left-wrapper">
+        <div class="vxe-table--header-wrapper">
+          <table class="vxe-table--header">
+            <colgroup>
+              <col name="col_55" style="width: 80px" />
+              <col name="col_56" style="width: 60px" />
+            </colgroup>
+            <thead>
+              <tr class="vxe-header--row">
+                <th data-colid="col_55" class="vxe-header--column col_55 col--center col--checkbox">
+                  <div class="vxe-cell"><span class="vxe-cell--checkbox"><span class="vxe-checkbox--icon"></span></span></div>
+                </th>
+                <th data-colid="col_56" class="vxe-header--column col_56 col--center col--seq">
+                  <div class="vxe-cell"><span class="vxe-cell--title">序号</span></div>
+                </th>
+              </tr>
+            </thead>
+          </table>
+        </div>
+        <div class="vxe-table--body-wrapper" id="fixBox">
+          <div class="vxe-body--y-space" id="fixTop" style="height: 0"></div>
+          <table class="vxe-table--body">
+            <colgroup>
+              <col name="col_55" style="width: 80px" />
+              <col name="col_56" style="width: 60px" />
+            </colgroup>
+            <tbody id="fixBody"></tbody>
+          </table>
+          <div class="vxe-body--y-space" id="fixBottom" style="height: 0"></div>
+        </div>
+      </div>
+
+      <!-- 主表表头 -->
+      <div class="vxe-table--header-wrapper body--wrapper">
+        <table class="vxe-table--header">
+          <colgroup>
+            <col name="col_55" style="width: 80px" />
+            <col name="col_56" style="width: 60px" />
+            <col name="col_57" style="width: 120px" />
+            <col name="col_61" style="width: 120px" />
+            <col name="col_62" style="width: 120px" />
+            <col name="col_63" style="width: 180px" />
+            <col name="col_64" style="width: 120px" />
+            <col name="col_66" style="width: 250px" />
+            <col name="col_67" style="width: 120px" />
+            <col name="col_gutter" style="width: 8px" />
+          </colgroup>
+          <thead>
+            <tr class="vxe-header--row">
+              <th data-colid="col_55" class="vxe-header--column col_55 col--center col--checkbox fixed--hidden">
+                <div class="vxe-cell"><span class="vxe-cell--checkbox"><span class="vxe-checkbox--icon"></span></span></div>
+              </th>
+              <th data-colid="col_56" class="vxe-header--column col_56 col--center col--seq fixed--hidden">
+                <div class="vxe-cell"><span class="vxe-cell--title">序号</span></div>
+              </th>
+              <th data-colid="col_57" class="vxe-header--column col_57"><div class="vxe-cell"><span class="vxe-cell--title">户编号</span></div></th>
+              <th data-colid="col_61" class="vxe-header--column col_61"><div class="vxe-cell"><span class="vxe-cell--title">户口性质</span></div></th>
+              <th data-colid="col_62" class="vxe-header--column col_62"><div class="vxe-cell"><span class="vxe-cell--title">家庭人口</span></div></th>
+              <th data-colid="col_63" class="vxe-header--column col_63"><div class="vxe-cell"><span class="vxe-cell--title">户口本号</span></div></th>
+              <th data-colid="col_64" class="vxe-header--column col_64"><div class="vxe-cell"><span class="vxe-cell--title">是否有效</span></div></th>
+              <th data-colid="col_66" class="vxe-header--column col_66"><div class="vxe-cell"><span class="vxe-cell--title">备注</span></div></th>
+              <th data-colid="col_67" class="vxe-header--column col_67 col--last"><div class="vxe-cell"><span class="vxe-cell--title">户类型</span></div></th>
+              <th class="vxe-header--gutter col--gutter"></th>
+            </tr>
+          </thead>
+        </table>
+      </div>
+
+      <!-- 主表表体（虚拟滚动，DOM 里只保留可视区附近的行） -->
+      <div class="vxe-table--body-wrapper body--wrapper" id="mainBox">
+        <div class="vxe-body--y-space" id="mainTop" style="height: 0"></div>
+        <table class="vxe-table--body">
+          <colgroup>
+            <col name="col_55" style="width: 80px" />
+            <col name="col_56" style="width: 60px" />
+            <col name="col_57" style="width: 120px" />
+            <col name="col_61" style="width: 120px" />
+            <col name="col_62" style="width: 120px" />
+            <col name="col_63" style="width: 180px" />
+            <col name="col_64" style="width: 120px" />
+            <col name="col_66" style="width: 250px" />
+            <col name="col_67" style="width: 120px" />
+          </colgroup>
+          <tbody id="mainBody"></tbody>
+        </table>
+        <div class="vxe-body--y-space" id="mainBottom" style="height: 0"></div>
+      </div>
+    </div>
+
+    <pre id="out" style="display: none"></pre>
+
+    <script>
+      /* ---- 造 500 行数据，并模拟 vxe 的虚拟滚动渲染 ---- */
+      var TOTAL = 500;
+      var ROW_H = 33;
+      var DATA = [];
+      for (var i = 0; i < TOTAL; i++) {
+        DATA.push({
+          id: 'H' + (1000 + i),
+          nature: i % 2 ? '非农业户口' : '农业户口',
+          pop: String(1 + (i % 4)),
+          book: i % 3 === 0 ? '' : '21027' + String(100000 + i),
+          valid: '有效',
+          note: i % 50 === 0 ? '原户主变更' : '',
+          type: '本区划户'
+        });
+      }
+
+      function cell(text, cls) {
+        return '<div class="vxe-cell' + (cls ? ' ' + cls : '') + '"><span class="vxe-cell--label">' + text + '</span></div>';
+      }
+
+      function mainRow(i) {
+        var d = DATA[i];
+        return (
+          '<tr data-rowid="row_' + i + '" class="vxe-body--row">' +
+          '<td class="vxe-body--column col_55 col--checkbox fixed--hidden"><div class="vxe-cell"></div></td>' +
+          '<td class="vxe-body--column col_56 col--seq fixed--hidden"><div class="vxe-cell"></div></td>' +
+          '<td class="vxe-body--column col_57">' + cell(d.id) + '</td>' +
+          '<td class="vxe-body--column col_61">' + cell(d.nature) + '</td>' +
+          '<td class="vxe-body--column col_62">' + cell(d.pop) + '</td>' +
+          '<td class="vxe-body--column col_63">' + cell(d.book) + '</td>' +
+          '<td class="vxe-body--column col_64">' + cell(d.valid) + '</td>' +
+          '<td class="vxe-body--column col_66">' + cell(d.note) + '</td>' +
+          '<td class="vxe-body--column col_67">' + cell(d.type) + '</td>' +
+          '</tr>'
+        );
+      }
+
+      function fixRow(i) {
+        return (
+          '<tr data-rowid="row_' + i + '" class="vxe-body--row">' +
+          '<td class="vxe-body--column col_55 col--checkbox"><div class="vxe-cell"></div></td>' +
+          '<td class="vxe-body--column col_56 col--seq"><div class="vxe-cell"></div></td>' +
+          '</tr>'
+        );
+      }
+
+      function bindVirtual(box, tbody, topEl, bottomEl, rowFn) {
+        function render() {
+          var start = Math.floor(box.scrollTop / ROW_H);
+          var count = Math.ceil(box.clientHeight / ROW_H) + 2;
+          var end = Math.min(TOTAL, start + count);
+          topEl.style.height = start * ROW_H + 'px';
+          bottomEl.style.height = Math.max(0, (TOTAL - end) * ROW_H) + 'px';
+          var html = [];
+          for (var i = start; i < end; i++) html.push(rowFn(i));
+          tbody.innerHTML = html.join('');
+        }
+        box.addEventListener('scroll', render);
+        render();
+      }
+
+      bindVirtual(
+        document.getElementById('mainBox'),
+        document.getElementById('mainBody'),
+        document.getElementById('mainTop'),
+        document.getElementById('mainBottom'),
+        mainRow
+      );
+      bindVirtual(
+        document.getElementById('fixBox'),
+        document.getElementById('fixBody'),
+        document.getElementById('fixTop'),
+        document.getElementById('fixBottom'),
+        fixRow
+      );
+    </script>
+
+    <script src="../content/parser.js"></script>
+    <script src="../content/harvest.js"></script>
+    <script src="../content/xlsx.js"></script>
+    <script src="vxe-virtual-run.js"></script>
+  </body>
+</html>

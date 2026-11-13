@@ -40,7 +40,9 @@
         title: t.title,
         nested: t.nested,
         merged: !!t.merged,
-        fragments: t.fragments || 1
+        fragments: t.fragments || 1,
+        virtual: !!t.virtual,
+        totalRows: t.totalRows || 0
       };
     });
   }
@@ -60,13 +62,14 @@
     }
 
     if (msg.type === 'T2X_DO_EXTRACT') {
-      try {
-        var data = T2X.extractByIndex(msg.index, msg.options || {});
-        sendResponse({ ok: true, rows: data.rows, merges: data.merges, title: data.title });
-      } catch (e) {
-        sendResponse({ ok: false, error: String((e && e.message) || e) });
-      }
-      return;
+      T2X.extractByIndex(msg.index, msg.options || {})
+        .then(function (data) {
+          sendResponse({ ok: true, rows: data.rows, merges: data.merges, title: data.title });
+        })
+        .catch(function (e) {
+          sendResponse({ ok: false, error: String((e && e.message) || e) });
+        });
+      return true; // 异步响应
     }
 
     if (msg.type === 'T2X_OPEN_PANEL') {
@@ -401,6 +404,7 @@
 
       var em = document.createElement('em');
       var metaText = t.rows + ' 行 × ' + t.cols + ' 列';
+      if (t.virtual) metaText += ' · 虚拟滚动';
       if (t.merged) metaText += ' · 由 ' + t.fragments + ' 个片段合并';
       em.textContent = metaText + (t.preview ? ' · ' + t.preview : '');
 
@@ -521,6 +525,11 @@
     state.busy = true;
     syncCheckboxes();
 
+    // 虚拟滚动表格需要滚动采集，把进度回显到状态栏
+    T2X.onHarvestProgress = function (got, estimate) {
+      setStatus('正在采集全部行… ' + got + ' / 约 ' + estimate);
+    };
+
     var options = {
       includeHidden: ui.optHidden.checked
     };
@@ -531,7 +540,7 @@
     var chain = Promise.resolve();
     picked.forEach(function (t) {
       chain = chain.then(function () {
-        setStatus('正在读取：' + (t.title || '表格'));
+        setStatus(t.virtual ? '正在采集全部行：' + (t.title || '表格') : '正在读取：' + (t.title || '表格'));
         return send({
           type: 'T2X_EXTRACT',
           frameId: t.frameId,
@@ -564,6 +573,7 @@
         setStatus('导出失败：' + String((e && e.message) || e));
       })
       .then(function () {
+        T2X.onHarvestProgress = null;
         state.busy = false;
         syncCheckboxes();
       });
@@ -628,23 +638,25 @@
           out.style.display = 'none';
           (document.body || document.documentElement).appendChild(out);
         }
-        try {
-          var idx = parseInt(document.documentElement.getAttribute('data-t2x-index') || '0', 10);
-          T2X.scan();
-          var data = T2X.extractByIndex(idx, {});
-          var bytes = T2X.buildWorkbook([{ name: data.title || 'T', rows: data.rows, merges: data.merges }], {
-            detectNumbers: true
-          });
-          out.textContent = JSON.stringify({
-            ok: true,
-            rows: data.rows,
-            merges: data.merges,
-            size: bytes.length,
-            b64: T2X.toBase64(bytes)
-          });
-        } catch (e) {
-          out.textContent = JSON.stringify({ ok: false, error: String((e && e.message) || e) });
-        }
+        (async function () {
+          try {
+            var idx = parseInt(document.documentElement.getAttribute('data-t2x-index') || '0', 10);
+            T2X.scan();
+            var data = await T2X.extractByIndex(idx, {});
+            var bytes = T2X.buildWorkbook([{ name: data.title || 'T', rows: data.rows, merges: data.merges }], {
+              detectNumbers: true
+            });
+            out.textContent = JSON.stringify({
+              ok: true,
+              rows: data.rows,
+              merges: data.merges,
+              size: bytes.length,
+              b64: T2X.toBase64(bytes)
+            });
+          } catch (e) {
+            out.textContent = JSON.stringify({ ok: false, error: String((e && e.message) || e) });
+          }
+        })();
       });
     }
   } catch (e) {

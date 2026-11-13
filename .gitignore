@@ -1,8 +1,5 @@
 # 测试产物
-test/out.xlsx
-test/e2e-out.xlsx
-test/vxe-out.xlsx
-test/e2e-frame.xlsx
+test/*.xlsx
 test/tmp-*.json
 test/*.log
 

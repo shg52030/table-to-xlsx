@@ -88,7 +88,17 @@ try {
     if (href.indexOf(target) >= 0) break;
   }
   if (href.indexOf(target) < 0) console.error('页面未加载，当前地址:', href);
-  await sleep(300);
+
+  // 测试脚本可能是异步的（虚拟滚动采集），等 #out 写出内容再取值
+  for (let i = 0; i < 120; i++) {
+    const r0 = await send('Runtime.evaluate', {
+      expression: "(() => { const o = document.getElementById('out'); return o && o.textContent ? o.textContent.length : 0; })()",
+      returnByValue: true
+    });
+    if (((r0.result && r0.result.result && r0.result.result.value) || 0) > 0) break;
+    await sleep(150);
+  }
+  await sleep(200);
 
   const r = await send('Runtime.evaluate', { expression: expr, returnByValue: true, awaitPromise: true });
   const out = r.result && r.result.result;

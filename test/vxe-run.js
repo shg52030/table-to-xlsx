@@ -1,4 +1,4 @@
-(function () {
+(async function () {
   var results = [];
   function check(name, pass, detail) {
     results.push({ name: name, pass: !!pass, detail: detail === undefined ? '' : String(detail).slice(0, 400) });
@@ -19,7 +19,7 @@
     check('行数 = 1 表头 + 3 数据', t.rows === 4, 'rows=' + t.rows);
     check('列数 = 9 - 1 勾选列', t.cols === 8, 'cols=' + t.cols);
 
-    var d = T2X.extractByIndex(0, {});
+    var d = await T2X.extractByIndex(0, {});
     same('合并后表头行', d.rows[0], ['序号', '户编号', '户主姓名', '户主身份证号', '家庭人口数', '户口性质', '户口本号', '住址']);
     same('第 1 行数据', d.rows[1], ['1', '1575', '许**', '150526196603050017', '1', '农业户口', '', '鲁xx山村']);
     same('第 2 行数据', d.rows[2], ['2', '1576', '王**', '320102199001011234', '3', '非农业户口', 'NO.0012', '和平路 12 号']);
