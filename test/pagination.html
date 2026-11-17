@@ -172,6 +172,27 @@
       document.getElementById('prevBtn').addEventListener('click', function () { flip(-1); });
       document.getElementById('nextBtn').addEventListener('click', function () { flip(1); });
 
+      function jumpTo(target) {
+        var pages = Math.ceil(TOTAL / pageSize);
+        var next = Math.min(pages, Math.max(1, parseInt(target, 10) || 1));
+        if (next === page) return;
+        var mask = document.createElement('div');
+        mask.className = 'el-loading-mask';
+        document.body.appendChild(mask);
+        setTimeout(function () {
+          page = next;
+          renderBody();
+          renderPager();
+          mask.remove();
+        }, 25);
+      }
+      var jumpInput = document.getElementById('jumpInput');
+      jumpInput.addEventListener('input', function () { if (jumpInput.value) jumpTo(jumpInput.value); });
+      jumpInput.addEventListener('change', function () { if (jumpInput.value) jumpTo(jumpInput.value); });
+      jumpInput.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' && jumpInput.value) jumpTo(jumpInput.value);
+      });
+
       document.addEventListener('keydown', function (e) {
         if (e.key === 'Escape') {
           var pop = document.querySelector('.el-select-dropdown');

@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>分页框架兼容性样本</title>
+    <style>
+      body { font: 13px/1.5 "Microsoft YaHei", sans-serif; padding: 20px; color: #1f2937; }
+      table { border-collapse: separate; border-spacing: 0; width: 600px; }
+      th, td { border: 1px solid #e8eaec; padding: 0 8px; height: 28px; font-weight: normal; }
+      .ant-pagination, .my-pager { display: flex; align-items: center; gap: 10px; margin-top: 16px; }
+      .ant-pagination button, .ant-pagination li, .my-pager button {
+        border: 1px solid #d9d9d9; background: #fff; padding: 4px 10px; cursor: pointer; list-style: none;
+      }
+      .ant-pagination-item { display: inline-block; }
+      .ant-pagination-item-active { background: #1677ff; color: #fff; }
+      .ant-select-selector { border: 1px solid #d9d9d9; padding: 4px 10px; cursor: pointer; background: #fff; }
+      .ant-select-dropdown {
+        position: fixed; top: 240px; left: 40px; background: #fff; border: 1px solid #d9d9d9;
+        z-index: 9999; width: 130px;
+      }
+      .ant-select-item-option { padding: 5px 10px; cursor: pointer; list-style: none; }
+      .my-pager button[disabled] { opacity: .45; cursor: not-allowed; }
+      #out { display: none; }
+    </style>
+  </head>
+  <body>
+    <div id="caseAntd">
+      <h3 style="font-size: 14px; color: #1677ff">Ant Design 分页样本（自定义每页条数下拉）</h3>
+      <div class="ant-table">
+        <table id="dataTable">
+          <thead><tr><th>工单号</th><th>标题</th><th>状态</th></tr></thead>
+          <tbody id="tbody"></tbody>
+        </table>
+      </div>
+      <div class="ant-pagination" id="pager">
+        <span class="ant-pagination-total-text">共 46 条</span>
+        <span class="ant-pagination-options">
+          <div class="ant-select-selector" id="sizeTrigger">10 条/页</div>
+        </span>
+        <ul id="nums" style="display: flex; gap: 4px; margin: 0; padding: 0"></ul>
+        <button type="button" class="ant-pagination-next" id="nextBtn">›</button>
+        <span class="ant-pagination-options-quick-jumper">跳至 <input type="number" id="jumpInput" min="1" max="5" /> 页</span>
+      </div>
+    </div>
+
+    <div id="caseGeneric" style="display: none">
+      <h3 style="font-size: 14px; color: #1677ff">通用分页样本（原生 select + 下一页按钮）</h3>
+      <div class="table-wrapper">
+        <table id="dataTableG">
+          <thead><tr><th>工单号</th><th>标题</th><th>状态</th></tr></thead>
+          <tbody id="tbodyG"></tbody>
+        </table>
+      </div>
+      <div class="my-pager" id="pagerG">
+        <span class="total">共 46 条</span>
+        <select id="sizeG">
+          <option value="10">10 条/页</option>
+          <option value="20">20 条/页</option>
+          <option value="50">50 条/页</option>
+        </select>
+        <button type="button" class="pagination-next" id="nextG">下一页</button>
+      </div>
+    </div>
+
+    <pre id="out"></pre>
+
+    <script>
+      var CASE = new URLSearchParams(location.search).get('case') || 'antd';
+      window.__CASE__ = CASE;
+      document.getElementById(CASE === 'antd' ? 'caseGeneric' : 'caseAntd').style.display = 'none';
+      document.getElementById(CASE === 'antd' ? 'caseAntd' : 'caseGeneric').style.display = 'block';
+
+      var TOTAL = 46;
+      var pageSize = 10;
+      var page = 1;
+
+      function renderBody() {
+        var start = (page - 1) * pageSize;
+        var end = Math.min(TOTAL, start + pageSize);
+        var html = [];
+        for (var i = start; i < end; i++) {
+          html.push('<tr><td>GD-' + String(i + 1).padStart(6, '0') + '</td><td>标题 ' + (i + 1) + '</td><td>处理中</td></tr>');
+        }
+        document.getElementById(CASE === 'antd' ? 'tbody' : 'tbodyG').innerHTML = html.join('');
+      }
+
+      function renderPager() {
+        var pages = Math.ceil(TOTAL / pageSize);
+        if (CASE === 'antd') {
+          document.getElementById('jumpInput').max = String(pages);
+          document.getElementById('sizeTrigger').textContent = pageSize + ' 条/页';
+          var html = [];
+          for (var i = 1; i <= Math.min(pages, 5); i++) {
+            html.push('<li class="ant-pagination-item' + (i === page ? ' ant-pagination-item-active' : '') + '"' +
+              (i === page ? ' aria-current="true"' : '') + '>' + i + '</li>');
+          }
+          document.getElementById('nums').innerHTML = html.join('');
+          document.getElementById('nextBtn').disabled = page >= pages;
+        } else {
+          document.getElementById('sizeG').value = String(pageSize);
+          document.getElementById('nextG').disabled = page >= pages;
+        }
+      }
+
+      function renderAll() { renderBody(); renderPager(); }
+
+      function flip(delta) {
+        var pages = Math.ceil(TOTAL / pageSize);
+        var next = Math.min(pages, Math.max(1, page + delta));
+        if (next === page) return;
+        page = next;
+        renderBody();
+        renderPager();
+      }
+
+      if (CASE === 'antd') {
+        document.getElementById('nextBtn').addEventListener('click', function () { flip(1); });
+        var jumpInput = document.getElementById('jumpInput');
+        function jumpTo(target) {
+          var pages = Math.ceil(TOTAL / pageSize);
+          var next = Math.min(pages, Math.max(1, parseInt(target, 10) || 1));
+          if (next === page) return;
+          page = next;
+          renderBody();
+          renderPager();
+        }
+        jumpInput.addEventListener('input', function () { if (jumpInput.value) jumpTo(jumpInput.value); });
+        jumpInput.addEventListener('change', function () { if (jumpInput.value) jumpTo(jumpInput.value); });
+        jumpInput.addEventListener('keydown', function (e) {
+          if (e.key === 'Enter' && jumpInput.value) jumpTo(jumpInput.value);
+        });
+
+        document.getElementById('sizeTrigger').addEventListener('click', function () {
+          if (document.querySelector('.ant-select-dropdown')) return;
+          var pop = document.createElement('div');
+          pop.className = 'ant-select-dropdown';
+          pop.innerHTML = '<ul>' + [10, 20, 50].map(function (n) {
+            return '<li class="ant-select-item-option">' + n + ' 条/页</li>';
+          }).join('') + '</ul>';
+          document.body.appendChild(pop);
+          pop.querySelectorAll('.ant-select-item-option').forEach(function (li) {
+            li.addEventListener('click', function () {
+              pageSize = parseInt(li.textContent, 10);
+              page = 1;
+              pop.remove();
+              renderAll();
+            });
+          });
+        });
+        document.addEventListener('keydown', function (e) {
+          if (e.key !== 'Escape') return;
+          var pop = document.querySelector('.ant-select-dropdown');
+          if (pop) pop.remove();
+        });
+      } else {
+        document.getElementById('nextG').addEventListener('click', function () { flip(1); });
+        document.getElementById('sizeG').addEventListener('change', function (e) {
+          pageSize = parseInt(e.target.value, 10);
+          page = 1;
+          renderAll();
+        });
+      }
+
+      renderAll();
+    </script>
+    <script src="../content/parser.js"></script>
+    <script src="../content/pager.js"></script>
+    <script src="../content/xlsx.js"></script>
+    <script src="compat-run.js"></script>
+  </body>
+</html>

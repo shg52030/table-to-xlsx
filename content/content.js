@@ -219,6 +219,16 @@
       background: '#ffffff',
       color: '#334155'
     },
+    '.opts input[type="number"]': {
+      'font-family': 'inherit',
+      'font-size': '12px',
+      width: '56px',
+      padding: '2px 4px',
+      border: '1px solid #d8dee6',
+      'border-radius': '6px',
+      background: '#ffffff',
+      color: '#334155'
+    },
     '.foot': {
       display: 'flex',
       gap: '8px',
@@ -274,6 +284,7 @@
     '<label class="chk"><input type="checkbox" id="optAsk"><span>询问保存位置</span></label>' +
     '<label class="chk"><input type="checkbox" id="optPager"><span>自动翻页合并到一个 Sheet</span></label>' +
     '<label class="chk" id="pagerRow" style="display:none"><span>每页条数</span><select id="pageSize"><option value="0">自动（最大）</option></select></label>' +
+    '<label class="chk" id="rangeRow" style="display:none" title="留空表示从第 1 页到末页全部导出"><span>页码范围</span><input type="number" id="rangeFrom" min="1" placeholder="起" /><span>至</span><input type="number" id="rangeTo" min="1" placeholder="止" /><span>留空=全部</span></label>' +
     '</div>' +
     '<div class="foot"><button class="btn ghost" id="stop" disabled>停止</button><button class="btn ghost" id="cancel">取消</button><button class="btn primary" id="go" disabled>导出</button></div>' +
     '<div class="status" id="status"></div>' +
@@ -319,7 +330,10 @@
       optAsk: $('optAsk'),
       optPager: $('optPager'),
       pagerRow: $('pagerRow'),
-      pageSize: $('pageSize')
+      pageSize: $('pageSize'),
+      rangeRow: $('rangeRow'),
+      rangeFrom: $('rangeFrom'),
+      rangeTo: $('rangeTo')
     };
 
     ui.fab.addEventListener('click', function () {
@@ -348,6 +362,8 @@
       saveOptions();
     });
     ui.pageSize.addEventListener('change', saveOptions);
+    ui.rangeFrom.addEventListener('change', saveOptions);
+    ui.rangeTo.addEventListener('change', saveOptions);
 
     shadow.addEventListener('keydown', function (e) {
       if (e.key === 'Escape') closePanel();
@@ -355,14 +371,19 @@
 
     (document.body || document.documentElement).appendChild(host);
 
-    chrome.storage.local.get(['t2x_hidden', 't2x_num', 't2x_ask', 't2x_pager', 't2x_pagesize'], function (r) {
-      ui.optHidden.checked = !!r.t2x_hidden;
-      ui.optNum.checked = r.t2x_num !== false;
-      ui.optAsk.checked = !!r.t2x_ask;
-      ui.optPager.checked = !!r.t2x_pager;
-      state.pageSizeSaved = parseInt(r.t2x_pagesize, 10) || 0;
-      syncPagerRow();
-    });
+    chrome.storage.local.get(
+      ['t2x_hidden', 't2x_num', 't2x_ask', 't2x_pager', 't2x_pagesize', 't2x_rangefrom', 't2x_rangeto'],
+      function (r) {
+        ui.optHidden.checked = !!r.t2x_hidden;
+        ui.optNum.checked = r.t2x_num !== false;
+        ui.optAsk.checked = !!r.t2x_ask;
+        ui.optPager.checked = !!r.t2x_pager;
+        state.pageSizeSaved = parseInt(r.t2x_pagesize, 10) || 0;
+        ui.rangeFrom.value = r.t2x_rangefrom ? String(parseInt(r.t2x_rangefrom, 10) || '') : '';
+        ui.rangeTo.value = r.t2x_rangeto ? String(parseInt(r.t2x_rangeto, 10) || '') : '';
+        syncPagerRow();
+      }
+    );
 
     return ui;
   }
@@ -374,7 +395,9 @@
       t2x_num: ui.optNum.checked,
       t2x_ask: ui.optAsk.checked,
       t2x_pager: ui.optPager.checked,
-      t2x_pagesize: parseInt(ui.pageSize.value, 10) || 0
+      t2x_pagesize: parseInt(ui.pageSize.value, 10) || 0,
+      t2x_rangefrom: parseInt(ui.rangeFrom.value, 10) || 0,
+      t2x_rangeto: parseInt(ui.rangeTo.value, 10) || 0
     });
   }
 
@@ -408,6 +431,7 @@
     if (!ui) return;
     var show = !!ui.optPager.checked;
     ui.pagerRow.style.display = show ? 'flex' : 'none';
+    ui.rangeRow.style.display = show ? 'flex' : 'none';
     if (show) loadPageSizeOptions();
   }
 
@@ -625,6 +649,10 @@
         return T2X.autoHarvestPages(picked[0], {
           includeHidden: options.includeHidden,
           pageSize: ui.optPager.checked ? parseInt(ui.pageSize.value, 10) || 0 : 0,
+          range: {
+            from: parseInt(ui.rangeFrom.value, 10) || 0,
+            to: parseInt(ui.rangeTo.value, 10) || 0
+          },
           seqMode: 'renumber',
           shouldStop: function () {
             return state.stop;
@@ -636,7 +664,7 @@
           }
           if (data.warnings && data.warnings.length) pagerWarnings = data.warnings;
           sheets.push({ name: data.title || picked[0].title, rows: data.rows, merges: data.merges || [] });
-          setStatus('翻页采集完成：' + data.pages + ' 页 / ' + (data.rows.length - data.headerCount) + ' 行');
+          setStatus('翻页采集完成：第 ' + (data.pageFrom || 1) + '-' + (data.lastPage || data.pageTo) + ' 页 / ' + (data.rows.length - data.headerCount) + ' 行');
           return true;
         });
       });

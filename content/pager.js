@@ -69,7 +69,7 @@
       if (node.disabled === true) return true;
       if (node.getAttribute && node.getAttribute('disabled') !== null) return true;
       if (node.getAttribute && node.getAttribute('aria-disabled') === 'true') return true;
-      if (/(^|\s)(disabled|is-disabled|is--disabled)(\s|$)/.test(String(node.className || ''))) return true;
+      if (/(^|\s)(disabled|is-disabled|is--disabled|ant-pagination-disabled)(\s|$)/.test(String(node.className || ''))) return true;
       node = node.parentElement;
     }
     return false;
@@ -148,14 +148,19 @@
     return null;
   }
 
+  /* 有些通用分页没有「当前页高亮」节点，用内部记录兜底 */
+  function markPage(p, n) {
+    if (p) p.__t2x_page = n;
+  }
+
   /* 读取当前分页状态 */
   function pageInfo(p) {
-    var totalEl = q(p.root, '.el-pagination__total, .vxe-pager--total, .vxe-pager--left-wrapper, [class*="total"]');
+    var totalEl = q(p.root, '.el-pagination__total, .vxe-pager--total, .vxe-pager--left-wrapper, .ant-pagination-total-text, [class*="total"]');
     var total = num(txt(totalEl));
 
     var sizeEl = q(
       p.root,
-      '.el-pagination__sizes .el-select__placeholder, .el-pagination__sizes .el-select__selected-item, .vxe-pager--sizes, .vxe-pager--right-wrapper, [class*="sizes"]'
+      '.el-pagination__sizes .el-select__placeholder, .el-pagination__sizes .el-select__selected-item, .vxe-pager--sizes, .vxe-pager--right-wrapper, .ant-pagination-options, [class*="sizes"]'
     );
     var size = num(txt(sizeEl));
     if (!size) {
@@ -167,7 +172,7 @@
       p.root,
       '.el-pager li.is-active, .el-pager li.active, .ant-pagination-item-active, .vxe-pager--num-btn.is-active, .vxe-pager--current, [aria-current="true"]'
     );
-    var page = num(txt(active)) || 1;
+    var page = num(txt(active)) || (p && p.__t2x_page) || 1;
 
     var jump = q(p.root, '.el-pagination__jump input, input[aria-label="页"], input[type="number"]');
     var max = jump ? parseInt(jump.getAttribute('max'), 10) : 0;
@@ -180,7 +185,16 @@
   var SIZE_CAP = 1000;
 
   function sizeBox(p) {
-    return q(p.root, '.el-pagination__sizes, [class*="sizes"]');
+    var box = q(p.root, '.el-pagination__sizes, .ant-pagination-options, [class*="sizes"]');
+    if (box) return box;
+    // 通用分页：分页容器附近若有原生 select 且像是「条/页」，也认
+    var scope = p.root.parentElement || p.root;
+    var sels = scope.querySelectorAll('select');
+    for (var i = 0; i < sels.length; i++) {
+      var label = txt(sels[i]) + ' ' + txt(sels[i].parentElement);
+      if (/条\s*\/\s*页|page\s*size|条每页/i.test(label)) return sels[i].parentElement || sels[i];
+    }
+    return null;
   }
 
   function uniqDesc(list) {
@@ -210,14 +224,14 @@
 
   function visibleOptionEls() {
     var poppers = doc.querySelectorAll(
-      '.el-select-dropdown, .el-popper, .vxe-select-dropdown, .vxe-select--panel, [role="listbox"], .el-select-dropdown__list'
+      '.el-select-dropdown, .el-popper, .ant-select-dropdown, .vxe-select-dropdown, .vxe-select--panel, [role="listbox"], .el-select-dropdown__list'
     );
     var out = [];
     var seen = {};
     for (var pi = 0; pi < poppers.length; pi++) {
       if (!visible(poppers[pi])) continue;
       var items = poppers[pi].querySelectorAll(
-        '.el-select-dropdown__item, .vxe-select-option, .vxe-select-dropdown__item, .vxe-select--option, [role="option"], li'
+        '.el-select-dropdown__item, .ant-select-item-option, .vxe-select-option, .vxe-select-dropdown__item, .vxe-select--option, [role="option"], li'
       );
       for (var oi = 0; oi < items.length; oi++) {
         var el = items[oi];
@@ -252,7 +266,7 @@
     var native = nativeSizeOptions(box);
     if (native) return native;
 
-    var trigger = q(box, '.el-select__wrapper, .el-select, .el-input__inner, .vxe-select--wrapper, .vxe-input--inner');
+    var trigger = q(box, '.el-select__wrapper, .el-select, .el-input__inner, .ant-select-selector, .vxe-select--wrapper, .vxe-input--inner');
     if (!trigger) return [];
     fireClick(trigger);
     await sleep(150);
@@ -293,7 +307,7 @@
       };
     }
 
-    var trigger = q(box, '.el-select__wrapper, .el-select, .el-input__inner, .vxe-select--wrapper, .vxe-input--inner');
+    var trigger = q(box, '.el-select__wrapper, .el-select, .el-input__inner, .ant-select-selector, .vxe-select--wrapper, .vxe-input--inner');
     if (!trigger) return { ok: false, reason: '无法打开每页条数下拉框' };
     fireClick(trigger);
     await sleep(150);
@@ -329,6 +343,63 @@
       }
     }
     return { ok: false, reason: '选择 ' + chosen + ' 条/页后页面未更新', options: values };
+  }
+
+  /* 跳到指定页：优先跳转输入框，其次可见页码按钮，最后退化成连续点下一页 */
+  async function gotoPage(p, target, beforeSig, getSig, shouldStop, timeout) {
+    target = parseInt(target, 10) || 1;
+    var info = pageInfo(p);
+    if (info.page === target) return { ok: true };
+
+    var jump = q(
+      p.root,
+      '.el-pagination__jump input, .ant-pagination-options-quick-jumper input, input[aria-label="页"], input[type="number"]'
+    );
+    if (jump && !isDisabled(jump)) {
+      jump.value = String(target);
+      try {
+        jump.dispatchEvent(new Event('input', { bubbles: true }));
+        jump.dispatchEvent(new Event('change', { bubbles: true }));
+        jump.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', keyCode: 13, bubbles: true }));
+      } catch (e) {
+        /* ignore */
+      }
+      var jumped = await waitChange(beforeSig, getSig, shouldStop, timeout || 4000);
+      if (jumped.ok) {
+        markPage(p, target);
+        return { ok: true };
+      }
+      if (jumped.stopped) return { ok: false, stopped: true, reason: '用户取消' };
+    }
+
+    var nums = p.root.querySelectorAll('.el-pager li, .ant-pagination-item, .vxe-pager--num-btn, li.number');
+    for (var i = 0; i < nums.length; i++) {
+      if (num(txt(nums[i])) !== target || isDisabled(nums[i])) continue;
+      fireClick(nums[i]);
+      var clicked = await waitChange(beforeSig, getSig, shouldStop, timeout || 4000);
+      if (clicked.ok) {
+        markPage(p, target);
+        return { ok: true };
+      }
+      break;
+    }
+
+    var now = pageInfo(p).page || 1;
+    var steps = Math.min(Math.abs(target - now), 300);
+    for (var s = 0; s < steps; s++) {
+      if (shouldStop && shouldStop()) return { ok: false, stopped: true, reason: '用户取消' };
+      var next = findNext(p.root);
+      if (!next || isDisabled(next)) break;
+      fireClick(next);
+      var moved = await waitChange(beforeSig, getSig, shouldStop, timeout || 4000);
+      if (!moved.ok) break;
+      beforeSig = moved.sig;
+      now += target > now ? 1 : -1;
+      markPage(p, now);
+    }
+    return pageInfo(p).page === target
+      ? { ok: true }
+      : { ok: false, reason: '无法跳到第 ' + target + ' 页（当前第 ' + pageInfo(p).page + ' 页）' };
   }
 
   function hasLoading() {
@@ -464,9 +535,30 @@
     info = pageInfo(p);
 
     var totalRows = info.total || 0;
+    var totalPages = info.totalPages || Math.ceil(totalRows / (info.size || 10)) || 1;
     var maxPages = opts.maxPages || 600;
     var shouldStop = opts.shouldStop || null;
     var localDesc = desc || { index: 0, title: '', cols: 0 };
+
+    var rangeFrom = parseInt(opts.range && opts.range.from, 10) || 1;
+    var rangeTo = parseInt(opts.range && opts.range.to, 10) || 0;
+    if (rangeFrom < 1) rangeFrom = 1;
+    if (rangeTo && rangeTo < rangeFrom) {
+      var swap = rangeFrom;
+      rangeFrom = rangeTo;
+      rangeTo = swap;
+      warnings.push('页码范围已纠正为 ' + rangeFrom + '-' + rangeTo);
+    }
+    if (rangeFrom > totalPages) {
+      warnings.push('起始页 ' + rangeFrom + ' 超过总页数 ' + totalPages + '，改为第 ' + totalPages + ' 页');
+      rangeFrom = totalPages;
+    }
+    if (rangeTo > totalPages) {
+      warnings.push('结束页 ' + rangeTo + ' 超过总页数 ' + totalPages + '，改为第 ' + totalPages + ' 页');
+      rangeTo = totalPages;
+    }
+    var endPage = rangeTo || totalPages;
+    var isFullRange = !rangeTo || (rangeFrom === 1 && endPage >= totalPages);
 
     var acc = [];
     var merges = [];
@@ -476,7 +568,29 @@
     var pages = 0;
     var stopped = false;
 
-    while (pages < maxPages) {
+    function currentSig() {
+      var l = T2X.scan();
+      return sigOfList(l, resolveIndex(l, localDesc));
+    }
+
+    if (rangeFrom > 1) {
+      var jumped = await gotoPage(
+        p,
+        rangeFrom,
+        currentSig(),
+        currentSig,
+        shouldStop,
+        opts.pageTimeout || 5000
+      );
+      if (!jumped.ok) {
+        if (jumped.stopped) stopped = true;
+        else warnings.push(jumped.reason);
+      }
+      info = pageInfo(p);
+    }
+    var pageNo = info.page || rangeFrom;
+
+    while (pages < maxPages && !stopped) {
       if (shouldStop && shouldStop()) {
         stopped = true;
         break;
@@ -494,7 +608,7 @@
 
       var beforeSig = sigOfList(list, idx);
       var data = await T2X.extractByIndex(idx, opts);
-      if (!data || !data.rows || !data.rows.length) throw new Error('第 ' + (pages + 1) + ' 页没有读到数据');
+      if (!data || !data.rows || !data.rows.length) throw new Error('第 ' + pageNo + ' 页没有读到数据');
 
       if (!headerCount) {
         headerCount = data.headerCount || 1;
@@ -514,7 +628,7 @@
         }
         for (var m = 0; m < (data.merges || []).length; m++) {
           var mg = data.merges[m];
-          if (mg.r < headerCount) continue; // 后续页重复的表头不要
+          if (mg.r < headerCount) continue;
           merges.push({
             r: base + (mg.r - headerCount),
             c: mg.c,
@@ -523,14 +637,16 @@
           });
         }
         if (data.cols && data.cols !== cols && warnings.length < 5) {
-          warnings.push('第 ' + (pages + 1) + ' 页列数为 ' + data.cols + '，已按首页 ' + cols + ' 列对齐');
+          warnings.push('第 ' + pageNo + ' 页列数为 ' + data.cols + '，已按首页 ' + cols + ' 列对齐');
         }
       }
 
       pages++;
-      report(opts, acc.length - headerCount, totalRows || pages * (info.size || 10), '正在翻页采集（第 ' + pages + ' 页）');
+      var expected = rangeTo ? (endPage - rangeFrom + 1) * (info.size || 10) : totalRows;
+      report(opts, acc.length - headerCount, expected, '正在翻页采集（第 ' + pageNo + '/' + endPage + ' 页）');
 
-      if (totalRows && acc.length - headerCount >= totalRows) break;
+      if (pageNo >= endPage) break;
+      if (isFullRange && totalRows && acc.length - headerCount >= totalRows) break;
 
       var next = findNext(p.root) || findNext(doc);
       if (!next || isDisabled(next)) break;
@@ -538,10 +654,7 @@
       fireClick(next);
       var changed = await waitChange(
         beforeSig,
-        function () {
-          var l = T2X.scan();
-          return sigOfList(l, resolveIndex(l, localDesc));
-        },
+        currentSig,
         shouldStop,
         opts.pageTimeout || 8000
       );
@@ -550,12 +663,14 @@
         break;
       }
       if (!changed.ok) {
-        warnings.push('第 ' + pages + ' 页后' + changed.reason);
+        warnings.push('第 ' + pageNo + ' 页后' + changed.reason);
         break;
       }
+      pageNo++;
+      markPage(p, pageNo);
     }
 
-    if (pages >= maxPages && totalRows && acc.length - headerCount < totalRows) {
+    if (pages >= maxPages && isFullRange && totalRows && acc.length - headerCount < totalRows) {
       warnings.push('达到最大页数 ' + maxPages + '，仅采集到 ' + (acc.length - headerCount) + ' 行');
     }
 
@@ -566,6 +681,9 @@
       cols: cols + seq.colDelta,
       headerCount: headerCount,
       pages: pages,
+      pageFrom: rangeFrom,
+      pageTo: endPage,
+      lastPage: pageNo,
       title: title,
       totalRows: totalRows,
       warnings: warnings,

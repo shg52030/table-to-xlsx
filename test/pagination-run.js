@@ -33,6 +33,46 @@
     var fallback = await T2X.setPageSize(p, 33);
     check('不支持的条数回退到 20 并提示', fallback.ok && fallback.size === 20 && !!fallback.warn, JSON.stringify(fallback));
 
+    // ---- 指定页码范围 ----
+    var rangeData = await T2X.autoHarvestPages(list[0], {
+      pageSize: 100,
+      range: { from: 2, to: 3 },
+      seqMode: 'renumber',
+      pageTimeout: 6000
+    });
+    check('指定范围：只采集 2 页', rangeData.pages === 2, 'pages=' + rangeData.pages);
+    check('指定范围：返回页码 2-3', rangeData.pageFrom === 2 && rangeData.pageTo === 3, rangeData.pageFrom + '-' + rangeData.pageTo);
+    check('指定范围：1 表头 + 200 行', rangeData.rows.length === 201, '实际 ' + rangeData.rows.length);
+    check('指定范围：首行 GD-000101', rangeData.rows[1][2] === 'GD-000101', rangeData.rows[1][2]);
+    check('指定范围：末行 GD-000300', rangeData.rows[200][2] === 'GD-000300', rangeData.rows[200][2]);
+    var rangeSeq = true;
+    for (var rs = 1; rs < rangeData.rows.length; rs++) {
+      if (rangeData.rows[rs][0] !== String(rs)) { rangeSeq = false; break; }
+    }
+    check('指定范围：序号 1..200 连续', rangeSeq, rangeSeq ? 'ok' : '序号中断');
+
+    var oneData = await T2X.autoHarvestPages(list[0], {
+      pageSize: 100,
+      range: { from: 1, to: 1 },
+      seqMode: 'renumber',
+      pageTimeout: 6000
+    });
+    check('只导出第 1 页：1 页 / 100 行', oneData.pages === 1 && oneData.rows.length === 101, oneData.pages + ' 页 / ' + oneData.rows.length + ' 行');
+    check('只导出第 1 页：末行 GD-000100', oneData.rows[100][2] === 'GD-000100', oneData.rows[100][2]);
+
+    var clampData = await T2X.autoHarvestPages(list[0], {
+      pageSize: 100,
+      range: { from: 301, to: 999 },
+      seqMode: 'renumber',
+      pageTimeout: 6000
+    });
+    check(
+      '超出范围收敛到末页 31',
+      clampData.pageFrom === 31 && clampData.pageTo === 31 && clampData.pages === 1,
+      JSON.stringify({ from: clampData.pageFrom, to: clampData.pageTo, pages: clampData.pages })
+    );
+    check('超出范围给出警告', clampData.warnings.some(function (w) { return /超过总页数/.test(w); }), clampData.warnings.join('; '));
+
     var d = await T2X.autoHarvestPages(list[0], {
       pageSize: 0,
       maxPages: 600,
