@@ -24,8 +24,17 @@
     if (!list.length) throw new Error('没有识别到表格');
     check('勾选列被丢弃后为 17 列', list[0].cols === 17, 'cols=' + list[0].cols);
 
+    var sizes = await T2X.readPageSizeOptions();
+    same('读到页面支持的每页条数（降序）', sizes, [100, 50, 20, 10]);
+
+    var picked = await T2X.setPageSize(p, 50);
+    check('指定 50 条/页生效', picked.ok && picked.size === 50, JSON.stringify(picked));
+
+    var fallback = await T2X.setPageSize(p, 33);
+    check('不支持的条数回退到 20 并提示', fallback.ok && fallback.size === 20 && !!fallback.warn, JSON.stringify(fallback));
+
     var d = await T2X.autoHarvestPages(list[0], {
-      pageSizeCap: 1000,
+      pageSize: 0,
       maxPages: 600,
       seqMode: 'renumber',
       pageTimeout: 6000

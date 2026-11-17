@@ -177,22 +177,120 @@
     return { total: total, size: size, page: page, totalPages: totalPages };
   }
 
-  /* 把每页条数调到最大（Element Plus 的下拉选项是 teleport 到 body 的） */
-  async function setPageSize(p, cap) {
-    var box = q(p.root, '.el-pagination__sizes, [class*="sizes"]');
+  var SIZE_CAP = 1000;
+
+  function sizeBox(p) {
+    return q(p.root, '.el-pagination__sizes, [class*="sizes"]');
+  }
+
+  function uniqDesc(list) {
+    var seen = {};
+    var out = [];
+    for (var i = 0; i < list.length; i++) {
+      var v = parseInt(list[i], 10);
+      if (v > 0 && v <= SIZE_CAP && !seen[v]) {
+        seen[v] = true;
+        out.push(v);
+      }
+    }
+    return out.sort(function (a, b) {
+      return b - a;
+    });
+  }
+
+  function nativeSizeOptions(box) {
+    var native = box.querySelector('select');
+    if (!native) return null;
+    var vals = [];
+    for (var i = 0; i < native.options.length; i++) {
+      vals.push(num(native.options[i].textContent) || num(native.options[i].value));
+    }
+    return uniqDesc(vals);
+  }
+
+  function visibleOptionEls() {
+    var poppers = doc.querySelectorAll(
+      '.el-select-dropdown, .el-popper, .vxe-select-dropdown, .vxe-select--panel, [role="listbox"], .el-select-dropdown__list'
+    );
+    var out = [];
+    var seen = {};
+    for (var pi = 0; pi < poppers.length; pi++) {
+      if (!visible(poppers[pi])) continue;
+      var items = poppers[pi].querySelectorAll(
+        '.el-select-dropdown__item, .vxe-select-option, .vxe-select-dropdown__item, .vxe-select--option, [role="option"], li'
+      );
+      for (var oi = 0; oi < items.length; oi++) {
+        var el = items[oi];
+        if (!visible(el)) continue;
+        var v = num(txt(el));
+        if (v && v <= SIZE_CAP && !seen[v]) {
+          seen[v] = true;
+          out.push({ v: v, el: el });
+        }
+      }
+    }
+    out.sort(function (a, b) {
+      return b.v - a.v;
+    });
+    return out;
+  }
+
+  function closeSizeMenu() {
+    try {
+      doc.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    } catch (e) {
+      /* ignore */
+    }
+  }
+
+  /* 读出当前页面实际支持的每页条数，降序返回；不改页面状态 */
+  async function readPageSizeOptions(p) {
+    p = p || detectPager();
+    if (!p) return [];
+    var box = sizeBox(p);
+    if (!box) return [];
+    var native = nativeSizeOptions(box);
+    if (native) return native;
+
+    var trigger = q(box, '.el-select__wrapper, .el-select, .el-input__inner, .vxe-select--wrapper, .vxe-input--inner');
+    if (!trigger) return [];
+    fireClick(trigger);
+    await sleep(150);
+    var entries = visibleOptionEls();
+    closeSizeMenu();
+    return entries.map(function (e) {
+      return e.v;
+    });
+  }
+
+  function chooseSize(options, want) {
+    if (!options.length) return 0;
+    want = parseInt(want, 10) || 0;
+    if (!want) return options[0];
+    if (options.indexOf(want) >= 0) return want;
+    for (var i = 0; i < options.length; i++) if (options[i] <= want) return options[i];
+    return options[options.length - 1];
+  }
+
+  /* want=0 表示自动选最大；指定值不可用时回退到最接近的较小值并给出提示 */
+  async function setPageSize(p, want) {
+    var box = sizeBox(p);
     if (!box) return { ok: false, reason: '未找到每页条数选择器' };
 
-    var native = box.querySelector('select');
-    if (native) {
-      var opts = [];
-      for (var i = 0; i < native.options.length; i++) opts.push(num(native.options[i].textContent) || num(native.options[i].value));
-      var bestNative = 0;
-      for (var n = 0; n < opts.length; n++) if (opts[n] && opts[n] <= cap && opts[n] > bestNative) bestNative = opts[n];
-      if (!bestNative) return { ok: false, reason: '下拉框没有可用的条数选项' };
-      native.value = String(bestNative);
+    var nativeVals = nativeSizeOptions(box);
+    if (nativeVals) {
+      var chosenNative = chooseSize(nativeVals, want);
+      if (!chosenNative) return { ok: false, reason: '下拉框没有可用的条数选项' };
+      var native = box.querySelector('select');
+      native.value = String(chosenNative);
       native.dispatchEvent(new Event('change', { bubbles: true }));
       await sleep(250);
-      return { ok: true, size: bestNative };
+      return {
+        ok: true,
+        size: chosenNative,
+        options: nativeVals,
+        warn: chosenNative !== parseInt(want, 10) && want ? '页面不支持 ' + want + ' 条/页，已改用 ' + chosenNative : ''
+      };
     }
 
     var trigger = q(box, '.el-select__wrapper, .el-select, .el-input__inner, .vxe-select--wrapper, .vxe-input--inner');
@@ -200,30 +298,37 @@
     fireClick(trigger);
     await sleep(150);
 
-    var poppers = doc.querySelectorAll('.el-select-dropdown, .el-popper, .vxe-select-dropdown, .vxe-select--panel, [role="listbox"], .el-select-dropdown__list');
-    var best = 0;
-    var bestEl = null;
-    for (var pi = 0; pi < poppers.length; pi++) {
-      if (!visible(poppers[pi])) continue;
-      var items = poppers[pi].querySelectorAll('.el-select-dropdown__item, .vxe-select-option, .vxe-select-dropdown__item, .vxe-select--option, [role="option"], li');
-      for (var oi = 0; oi < items.length; oi++) {
-        var item = items[oi];
-        if (!visible(item)) continue;
-        var v = num(txt(item));
-        if (v && v <= cap && v > best) {
-          best = v;
-          bestEl = item;
-        }
-      }
+    var entries = visibleOptionEls();
+    if (!entries.length) {
+      closeSizeMenu();
+      return { ok: false, reason: '没有读到下拉选项（可能是自定义组件）' };
     }
-    if (!bestEl) return { ok: false, reason: '没有读到下拉选项（可能是自定义组件）' };
 
-    fireClick(bestEl);
+    var values = entries.map(function (e) {
+      return e.v;
+    });
+    var chosen = chooseSize(values, want);
+    var picked = null;
+    for (var i = 0; i < entries.length; i++) if (entries[i].v === chosen) picked = entries[i].el;
+    if (!picked) {
+      closeSizeMenu();
+      return { ok: false, reason: '无法选中 ' + chosen + ' 条/页' };
+    }
+
+    fireClick(picked);
+    closeSizeMenu();
     for (var w = 0; w < 40; w++) {
       await sleep(100);
-      if (pageInfo(p).size === best) return { ok: true, size: best };
+      if (pageInfo(p).size === chosen) {
+        return {
+          ok: true,
+          size: chosen,
+          options: values,
+          warn: chosen !== parseInt(want, 10) && want ? '页面不支持 ' + want + ' 条/页，已改用 ' + chosen : ''
+        };
+      }
     }
-    return { ok: false, reason: '选择 ' + best + ' 条/页后页面未更新' };
+    return { ok: false, reason: '选择 ' + chosen + ' 条/页后页面未更新', options: values };
   }
 
   function hasLoading() {
@@ -352,9 +457,10 @@
 
     var warnings = [];
     var info = pageInfo(p);
-    var cap = opts.pageSizeCap || 1000;
-    var sizeRes = await setPageSize(p, cap);
+    var want = parseInt(opts.pageSize, 10) || 0; // 0 = 自动选最大
+    var sizeRes = await setPageSize(p, want);
     if (!sizeRes.ok) warnings.push('每页条数调整失败：' + sizeRes.reason);
+    else if (sizeRes.warn) warnings.push(sizeRes.warn);
     info = pageInfo(p);
 
     var totalRows = info.total || 0;
@@ -469,5 +575,6 @@
 
   T2X.detectPager = detectPager;
   T2X.pageInfo = pageInfo;
+  T2X.readPageSizeOptions = readPageSizeOptions;
   T2X.setPageSize = setPageSize;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

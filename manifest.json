@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "网页表格导出 Excel",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "description": "把网页里的表格导出为 xlsx：支持合并单元格还原、多表多 Sheet、隐藏行过滤、数字自动识别、虚拟滚动与分页表格全量导出。纯本地处理，不联网。",
   "minimum_chrome_version": "102",
   "permissions": ["activeTab", "scripting", "storage", "downloads"],

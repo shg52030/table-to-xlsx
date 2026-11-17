@@ -172,6 +172,13 @@
       document.getElementById('prevBtn').addEventListener('click', function () { flip(-1); });
       document.getElementById('nextBtn').addEventListener('click', function () { flip(1); });
 
+      document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') {
+          var pop = document.querySelector('.el-select-dropdown');
+          if (pop) pop.remove();
+        }
+      });
+
       document.querySelector('.el-pagination__sizes .el-select__wrapper').addEventListener('click', function () {
         if (document.querySelector('.el-select-dropdown')) return;
         var pop = document.createElement('div');

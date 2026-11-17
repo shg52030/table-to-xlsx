@@ -210,6 +210,15 @@
       color: '#475569'
     },
     '.chk': { display: 'flex', 'align-items': 'center', gap: '5px', cursor: 'pointer', 'user-select': 'none' },
+    '.opts select': {
+      'font-family': 'inherit',
+      'font-size': '12px',
+      padding: '2px 6px',
+      border: '1px solid #d8dee6',
+      'border-radius': '6px',
+      background: '#ffffff',
+      color: '#334155'
+    },
     '.foot': {
       display: 'flex',
       gap: '8px',
@@ -264,6 +273,7 @@
     '<label class="chk"><input type="checkbox" id="optNum" checked><span>数字转数值</span></label>' +
     '<label class="chk"><input type="checkbox" id="optAsk"><span>询问保存位置</span></label>' +
     '<label class="chk"><input type="checkbox" id="optPager"><span>自动翻页合并到一个 Sheet</span></label>' +
+    '<label class="chk" id="pagerRow" style="display:none"><span>每页条数</span><select id="pageSize"><option value="0">自动（最大）</option></select></label>' +
     '</div>' +
     '<div class="foot"><button class="btn ghost" id="stop" disabled>停止</button><button class="btn ghost" id="cancel">取消</button><button class="btn primary" id="go" disabled>导出</button></div>' +
     '<div class="status" id="status"></div>' +
@@ -271,7 +281,7 @@
     '</div>';
 
   var ui = null;
-  var state = { tables: [], checked: {}, busy: false, stop: false };
+  var state = { tables: [], checked: {}, busy: false, stop: false, pageSizeSaved: 0 };
 
   function ensureUI() {
     if (ui) return ui;
@@ -307,7 +317,9 @@
       optHidden: $('optHidden'),
       optNum: $('optNum'),
       optAsk: $('optAsk'),
-      optPager: $('optPager')
+      optPager: $('optPager'),
+      pagerRow: $('pagerRow'),
+      pageSize: $('pageSize')
     };
 
     ui.fab.addEventListener('click', function () {
@@ -331,7 +343,11 @@
     ui.optHidden.addEventListener('change', saveOptions);
     ui.optNum.addEventListener('change', saveOptions);
     ui.optAsk.addEventListener('change', saveOptions);
-    ui.optPager.addEventListener('change', saveOptions);
+    ui.optPager.addEventListener('change', function () {
+      syncPagerRow();
+      saveOptions();
+    });
+    ui.pageSize.addEventListener('change', saveOptions);
 
     shadow.addEventListener('keydown', function (e) {
       if (e.key === 'Escape') closePanel();
@@ -339,11 +355,13 @@
 
     (document.body || document.documentElement).appendChild(host);
 
-    chrome.storage.local.get(['t2x_hidden', 't2x_num', 't2x_ask', 't2x_pager'], function (r) {
+    chrome.storage.local.get(['t2x_hidden', 't2x_num', 't2x_ask', 't2x_pager', 't2x_pagesize'], function (r) {
       ui.optHidden.checked = !!r.t2x_hidden;
       ui.optNum.checked = r.t2x_num !== false;
       ui.optAsk.checked = !!r.t2x_ask;
       ui.optPager.checked = !!r.t2x_pager;
+      state.pageSizeSaved = parseInt(r.t2x_pagesize, 10) || 0;
+      syncPagerRow();
     });
 
     return ui;
@@ -355,8 +373,42 @@
       t2x_hidden: ui.optHidden.checked,
       t2x_num: ui.optNum.checked,
       t2x_ask: ui.optAsk.checked,
-      t2x_pager: ui.optPager.checked
+      t2x_pager: ui.optPager.checked,
+      t2x_pagesize: parseInt(ui.pageSize.value, 10) || 0
     });
+  }
+
+  /* 读取当前页面实际支持的每页条数，默认选最大；用户上次选的值仍有效则沿用 */
+  function loadPageSizeOptions() {
+    if (!T2X || !T2X.readPageSizeOptions || !ui) return;
+    T2X.readPageSizeOptions()
+      .then(function (values) {
+        if (!ui || !values || !values.length) return;
+        ui.pageSize.textContent = '';
+        var auto = document.createElement('option');
+        auto.value = '0';
+        auto.textContent = '自动（最大 ' + values[0] + '）';
+        ui.pageSize.appendChild(auto);
+        values.forEach(function (v) {
+          var o = document.createElement('option');
+          o.value = String(v);
+          o.textContent = v + ' 条/页';
+          ui.pageSize.appendChild(o);
+        });
+        var saved = state.pageSizeSaved;
+        ui.pageSize.value = saved && values.indexOf(saved) >= 0 ? String(saved) : '0';
+        applyStyles(ui.shadow);
+      })
+      .catch(function () {
+        /* 读不到就保留「自动」 */
+      });
+  }
+
+  function syncPagerRow() {
+    if (!ui) return;
+    var show = !!ui.optPager.checked;
+    ui.pagerRow.style.display = show ? 'flex' : 'none';
+    if (show) loadPageSizeOptions();
   }
 
   function setStatus(text) {
@@ -448,6 +500,7 @@
 
   function openPanel() {
     ensureUI();
+    syncPagerRow();
     ui.panel.style.display = 'flex';
     ui.panel.style.flexDirection = 'column';
     state.checked = {};
@@ -571,6 +624,7 @@
         setStatus('正在准备自动翻页…');
         return T2X.autoHarvestPages(picked[0], {
           includeHidden: options.includeHidden,
+          pageSize: ui.optPager.checked ? parseInt(ui.pageSize.value, 10) || 0 : 0,
           seqMode: 'renumber',
           shouldStop: function () {
             return state.stop;
