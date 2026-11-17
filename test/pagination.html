@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>Element Plus 分页表格回归样本</title>
+    <style>
+      body { font: 13px/1.5 "Microsoft YaHei", sans-serif; padding: 20px; color: #1f2937; }
+      table { border-collapse: separate; border-spacing: 0; table-layout: fixed; width: 1500px; }
+      th, td { border: 1px solid #e8eaec; padding: 0 8px; height: 30px; font-weight: normal; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+      th { background: #f8f8f9; }
+      .cell { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+      .pagination-container { margin-top: 16px; }
+      .el-pagination { display: flex; align-items: center; gap: 10px; }
+      .el-pagination button, .el-pager li { border: 1px solid #dcdfe6; background: #fff; padding: 4px 10px; cursor: pointer; list-style: none; }
+      .el-pager { display: flex; gap: 4px; margin: 0; padding: 0; }
+      .el-pager li.is-active { background: #185fa5; color: #fff; }
+      .el-pagination button[disabled] { opacity: .45; cursor: not-allowed; }
+      .el-select__wrapper { border: 1px solid #dcdfe6; padding: 4px 10px; cursor: pointer; background: #fff; }
+      .el-loading-mask { position: absolute; inset: 0; background: rgba(255,255,255,.6); }
+      .el-select-dropdown { position: fixed; top: 300px; left: 60px; z-index: 9999; background: #fff; border: 1px solid #dcdfe6; width: 120px; }
+      .el-select-dropdown__item { padding: 5px 10px; cursor: pointer; list-style: none; }
+      .el-select-dropdown__item:hover { background: #f1f5f9; }
+      #out { display: none; }
+    </style>
+  </head>
+  <body>
+    <h2 style="font-size: 14px; color: #185fa5">分页表格：3015 行 / 每页 10 行</h2>
+
+    <div class="el-table el-table--fit">
+      <div class="el-table__header-wrapper">
+        <table class="el-table__header" id="headTable" border="0" cellpadding="0" cellspacing="0"></table>
+      </div>
+      <div class="el-table__body-wrapper">
+        <table class="el-table__body" id="bodyTable" border="0" cellpadding="0" cellspacing="0"></table>
+      </div>
+    </div>
+
+    <div class="pagination-container">
+      <div class="el-pagination is-background">
+        <span class="el-pagination__total is-first">共 3015 条</span>
+        <span class="el-pagination__sizes">
+          <div class="el-select el-select--default">
+            <div class="el-select__wrapper"><div class="el-select__selection"><div class="el-select__selected-item el-select__placeholder"><span id="sizeText">10条/页</span></div></div></div>
+          </div>
+        </span>
+        <button type="button" class="btn-prev" id="prevBtn" aria-label="上一页" disabled>&lt;</button>
+        <ul class="el-pager" id="pager"></ul>
+        <button type="button" class="btn-next" id="nextBtn" aria-label="下一页">&gt;</button>
+        <span class="el-pagination__jump"><input id="jumpInput" type="number" min="1" max="302" aria-label="页" /></span>
+      </div>
+    </div>
+
+    <pre id="out"></pre>
+
+    <script>
+      var TOTAL = 3015;
+      var pageSize = 10;
+      var page = 1;
+
+      var COLS = [
+        ['el-table_2_column_19', ''],
+        ['el-table_2_column_20', '预警'],
+        ['el-table_2_column_21', '工单号'],
+        ['el-table_2_column_22', '工单标题'],
+        ['el-table_2_column_23', '工单详情'],
+        ['el-table_2_column_24', '运维小组'],
+        ['el-table_2_column_25', '受理人'],
+        ['el-table_2_column_26', '电话'],
+        ['el-table_2_column_27', '软件系统'],
+        ['el-table_2_column_28', '单位名称'],
+        ['el-table_2_column_29', '工单状态'],
+        ['el-table_2_column_30', '优先级'],
+        ['el-table_2_column_31', '问题来源'],
+        ['el-table_2_column_32', '单位类型'],
+        ['el-table_2_column_33', '最后回复'],
+        ['el-table_2_column_34', '创建时间'],
+        ['el-table_2_column_35', '是否提交开发'],
+        ['el-table_2_column_36', '操作']
+      ];
+
+      function rowData(i) {
+        return [
+          '',
+          i % 7 === 0 ? '预警' : '',
+          'GD-' + String(i + 1).padStart(6, '0'),
+          '工单标题 ' + (i + 1),
+          '工单详情内容 ' + (i + 1),
+          'xxx工作组',
+          '张三',
+          '888888888',
+          '软件系统 ' + ((i % 5) + 1),
+          'xxx政局',
+          ['处理中', '待评价', '已评价'][i % 3],
+          i % 4 === 0 ? '优先' : '普通',
+          '微信受理',
+          i % 2 ? '预算单位' : '财政部门',
+          '2026-11-17 16:00:00',
+          '2026-11-17 15:00:00',
+          '否',
+          '工单处理'
+        ];
+      }
+
+      function colgroup() {
+        return '<colgroup>' + COLS.map(function (c) {
+          return '<col name="' + c[0] + '" width="100" />';
+        }).join('') + '</colgroup>';
+      }
+
+      function renderHead() {
+        var html = colgroup() + '<thead><tr>' + COLS.map(function (c, i) {
+          var cls = 'el-table__cell';
+          if (i === 0) cls += ' is-center el-table-column--selection';
+          return '<th class="' + cls + '"><div class="cell">' +
+            (i === 0 ? '<input type="checkbox" />' : c[1]) + '</div></th>';
+        }).join('') + '</tr></thead>';
+        document.getElementById('headTable').innerHTML = html;
+      }
+
+      function renderBody() {
+        var start = (page - 1) * pageSize;
+        var end = Math.min(TOTAL, start + pageSize);
+        var rows = [];
+        for (var i = start; i < end; i++) {
+          var d = rowData(i);
+          rows.push('<tr class="el-table__row">' + d.map(function (v, ci) {
+            var cls = 'el-table__cell';
+            if (ci === 0) cls += ' is-center el-table-column--selection';
+            return '<td class="' + cls + '"><div class="cell">' +
+              (ci === 0 ? '<input type="checkbox" />' : v) + '</div></td>';
+          }).join('') + '</tr>');
+        }
+        document.getElementById('bodyTable').innerHTML = colgroup() + '<tbody>' + rows.join('') + '</tbody>';
+      }
+
+      function renderPager() {
+        var pages = Math.ceil(TOTAL / pageSize);
+        document.getElementById('jumpInput').max = String(pages);
+        var from = Math.max(1, page - 2);
+        var to = Math.min(pages, from + 5);
+        var html = [];
+        for (var i = from; i <= to; i++) {
+          html.push('<li class="number' + (i === page ? ' is-active' : '') + '" aria-current="' + (i === page) + '" aria-label="第 ' + i + ' 页">' + i + '</li>');
+        }
+        document.getElementById('pager').innerHTML = html.join('');
+        document.getElementById('prevBtn').disabled = page <= 1;
+        document.getElementById('nextBtn').disabled = page >= pages;
+        document.getElementById('sizeText').textContent = pageSize + '条/页';
+      }
+
+      function renderAll() {
+        renderHead();
+        renderBody();
+        renderPager();
+      }
+
+      function flip(delta) {
+        var pages = Math.ceil(TOTAL / pageSize);
+        var next = Math.min(pages, Math.max(1, page + delta));
+        if (next === page) return;
+        var mask = document.createElement('div');
+        mask.className = 'el-loading-mask';
+        document.body.appendChild(mask);
+        setTimeout(function () {
+          page = next;
+          renderBody();
+          renderPager();
+          mask.remove();
+        }, 25);
+      }
+
+      document.getElementById('prevBtn').addEventListener('click', function () { flip(-1); });
+      document.getElementById('nextBtn').addEventListener('click', function () { flip(1); });
+
+      document.querySelector('.el-pagination__sizes .el-select__wrapper').addEventListener('click', function () {
+        if (document.querySelector('.el-select-dropdown')) return;
+        var pop = document.createElement('div');
+        pop.className = 'el-popper el-select-dropdown';
+        pop.innerHTML = '<ul>' + [10, 20, 50, 100].map(function (n) {
+          return '<li class="el-select-dropdown__item">' + n + '条/页</li>';
+        }).join('') + '</ul>';
+        document.body.appendChild(pop);
+        pop.querySelectorAll('.el-select-dropdown__item').forEach(function (li) {
+          li.addEventListener('click', function () {
+            pageSize = parseInt(li.textContent, 10);
+            page = 1;
+            pop.remove();
+            renderAll();
+          });
+        });
+      });
+
+      renderAll();
+    </script>
+
+    <script src="../content/parser.js"></script>
+    <script src="../content/pager.js"></script>
+    <script src="../content/xlsx.js"></script>
+    <script src="pagination-run.js"></script>
+  </body>
+</html>

@@ -263,14 +263,15 @@
     '<label class="chk"><input type="checkbox" id="optHidden"><span>包含隐藏行</span></label>' +
     '<label class="chk"><input type="checkbox" id="optNum" checked><span>数字转数值</span></label>' +
     '<label class="chk"><input type="checkbox" id="optAsk"><span>询问保存位置</span></label>' +
+    '<label class="chk"><input type="checkbox" id="optPager"><span>自动翻页合并到一个 Sheet</span></label>' +
     '</div>' +
-    '<div class="foot"><button class="btn ghost" id="cancel">取消</button><button class="btn primary" id="go" disabled>导出</button></div>' +
+    '<div class="foot"><button class="btn ghost" id="stop" disabled>停止</button><button class="btn ghost" id="cancel">取消</button><button class="btn primary" id="go" disabled>导出</button></div>' +
     '<div class="status" id="status"></div>' +
     '</div>' +
     '</div>';
 
   var ui = null;
-  var state = { tables: [], checked: {}, busy: false };
+  var state = { tables: [], checked: {}, busy: false, stop: false };
 
   function ensureUI() {
     if (ui) return ui;
@@ -301,10 +302,12 @@
       count: $('count'),
       status: $('status'),
       go: $('go'),
+      stop: $('stop'),
       selAll: $('selAll'),
       optHidden: $('optHidden'),
       optNum: $('optNum'),
-      optAsk: $('optAsk')
+      optAsk: $('optAsk'),
+      optPager: $('optPager')
     };
 
     ui.fab.addEventListener('click', function () {
@@ -314,6 +317,11 @@
     $('close').addEventListener('click', closePanel);
     $('cancel').addEventListener('click', closePanel);
     ui.go.addEventListener('click', doExport);
+    ui.stop.addEventListener('click', function () {
+      state.stop = true;
+      setStatus('正在停止…');
+      ui.stop.disabled = true;
+    });
     ui.selAll.addEventListener('change', function () {
       state.tables.forEach(function (t, i) {
         state.checked[i] = ui.selAll.checked;
@@ -323,6 +331,7 @@
     ui.optHidden.addEventListener('change', saveOptions);
     ui.optNum.addEventListener('change', saveOptions);
     ui.optAsk.addEventListener('change', saveOptions);
+    ui.optPager.addEventListener('change', saveOptions);
 
     shadow.addEventListener('keydown', function (e) {
       if (e.key === 'Escape') closePanel();
@@ -330,10 +339,11 @@
 
     (document.body || document.documentElement).appendChild(host);
 
-    chrome.storage.local.get(['t2x_hidden', 't2x_num', 't2x_ask'], function (r) {
+    chrome.storage.local.get(['t2x_hidden', 't2x_num', 't2x_ask', 't2x_pager'], function (r) {
       ui.optHidden.checked = !!r.t2x_hidden;
       ui.optNum.checked = r.t2x_num !== false;
       ui.optAsk.checked = !!r.t2x_ask;
+      ui.optPager.checked = !!r.t2x_pager;
     });
 
     return ui;
@@ -344,7 +354,8 @@
     chrome.storage.local.set({
       t2x_hidden: ui.optHidden.checked,
       t2x_num: ui.optNum.checked,
-      t2x_ask: ui.optAsk.checked
+      t2x_ask: ui.optAsk.checked,
+      t2x_pager: ui.optPager.checked
     });
   }
 
@@ -365,6 +376,9 @@
     ui.go.disabled = n === 0 || state.busy;
     ui.go.style.background = ui.go.disabled ? '#cbd5e1' : '#185FA5';
     ui.go.style.cursor = ui.go.disabled ? 'not-allowed' : 'pointer';
+    ui.stop.disabled = !state.busy || state.stop;
+    ui.stop.style.opacity = ui.stop.disabled ? '0.5' : '1';
+    ui.stop.style.cursor = ui.stop.disabled ? 'not-allowed' : 'pointer';
   }
 
   function renderList() {
@@ -462,6 +476,7 @@
     if (!ui) return;
     ui.panel.style.display = 'none';
     state.busy = false;
+    state.stop = false;
     syncCheckboxes();
   }
 
@@ -522,12 +537,23 @@
     });
     if (!picked.length) return;
 
+    var autoPager = !!ui.optPager.checked;
+    if (autoPager && picked.length !== 1) {
+      setStatus('自动翻页只能用于单个表格，请只勾选一张表');
+      return;
+    }
+    if (autoPager && picked[0].inFrame) {
+      setStatus('自动翻页暂不支持 iframe 内的表格');
+      return;
+    }
+
     state.busy = true;
+    state.stop = false;
     syncCheckboxes();
 
-    // 虚拟滚动表格需要滚动采集，把进度回显到状态栏
-    T2X.onHarvestProgress = function (got, estimate) {
-      setStatus('正在采集全部行… ' + got + ' / 约 ' + estimate);
+    // 虚拟滚动 / 自动翻页共用进度回显
+    T2X.onHarvestProgress = function (got, estimate, label) {
+      setStatus((label || '正在采集全部行') + '… ' + got + ' / 约 ' + estimate);
     };
 
     var options = {
@@ -536,37 +562,66 @@
     var detectNumbers = ui.optNum.checked;
     var sheets = [];
     var failed = [];
+    var pagerWarnings = [];
 
     var chain = Promise.resolve();
-    picked.forEach(function (t) {
+
+    if (autoPager) {
       chain = chain.then(function () {
-        setStatus(t.virtual ? '正在采集全部行：' + (t.title || '表格') : '正在读取：' + (t.title || '表格'));
-        return send({
-          type: 'T2X_EXTRACT',
-          frameId: t.frameId,
-          index: t.index,
-          options: options
-        }).then(function (res) {
-          if (res && res.ok && res.rows && res.rows.length) {
-            sheets.push({ name: res.title || t.title, rows: res.rows, merges: res.merges || [] });
-          } else {
-            failed.push((t.title || '表格') + '：' + ((res && res.error) || '无数据'));
+        setStatus('正在准备自动翻页…');
+        return T2X.autoHarvestPages(picked[0], {
+          includeHidden: options.includeHidden,
+          seqMode: 'renumber',
+          shouldStop: function () {
+            return state.stop;
           }
+        }).then(function (data) {
+          if (data.stopped) {
+            setStatus('已停止：采集了 ' + data.pages + ' 页 / ' + (data.rows.length - data.headerCount) + ' 行，未导出');
+            return false;
+          }
+          if (data.warnings && data.warnings.length) pagerWarnings = data.warnings;
+          sheets.push({ name: data.title || picked[0].title, rows: data.rows, merges: data.merges || [] });
+          setStatus('翻页采集完成：' + data.pages + ' 页 / ' + (data.rows.length - data.headerCount) + ' 行');
+          return true;
         });
       });
-    });
+    } else {
+      picked.forEach(function (t) {
+        chain = chain.then(function () {
+          setStatus(t.virtual ? '正在采集全部行：' + (t.title || '表格') : '正在读取：' + (t.title || '表格'));
+          return send({
+            type: 'T2X_EXTRACT',
+            frameId: t.frameId,
+            index: t.index,
+            options: options
+          }).then(function (res) {
+            if (res && res.ok && res.rows && res.rows.length) {
+              sheets.push({ name: res.title || t.title, rows: res.rows, merges: res.merges || [] });
+            } else {
+              failed.push((t.title || '表格') + '：' + ((res && res.error) || '无数据'));
+            }
+          });
+        });
+      });
+    }
 
     chain
-      .then(function () {
+      .then(function (proceed) {
+        if (proceed === false) return;
         if (!sheets.length) throw new Error(failed[0] || '没有读到任何数据');
         setStatus('正在生成 xlsx…');
         var bytes = T2X.buildWorkbook(sheets, { detectNumbers: detectNumbers });
         var name = safeName(document.title) || '网页表格';
         return downloadBytes(bytes, name + '_' + stamp() + '.xlsx').then(function () {
-          var msg = '已导出 ' + sheets.length + ' 个表格（' + Math.round(bytes.length / 1024) + ' KB）';
+          var rows = sheets.reduce(function (sum, s) {
+            return sum + s.rows.length;
+          }, 0);
+          var msg = '已导出 ' + sheets.length + ' 个表格 / ' + rows + ' 行（' + Math.round(bytes.length / 1024) + ' KB）';
           if (failed.length) msg += '，' + failed.length + ' 个失败';
+          if (pagerWarnings.length) msg += '；提示：' + pagerWarnings[0];
           setStatus(msg);
-          setTimeout(closePanel, 1200);
+          setTimeout(closePanel, 1500);
         });
       })
       .catch(function (e) {

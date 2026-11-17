@@ -949,7 +949,7 @@
       totalCols = keptCols;
     }
 
-    return { rows: allRows, merges: allMerges, cols: totalCols };
+    return { rows: allRows, merges: allMerges, cols: totalCols, headerCount: headRows.length };
   }
 
   /* ================= 标题 ================= */
